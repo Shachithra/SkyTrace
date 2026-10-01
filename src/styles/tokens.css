@@ -1,0 +1,73 @@
+/* SkyTrace design tokens — "Observatory in your pocket" */
+:root {
+  /* base */
+  --surface-deep: #05070b;          /* Deep Space */
+  --surface-observatory: #090d14;   /* Observatory Black */
+  --surface-instrument: #101721;    /* Night Surface */
+
+  /* text */
+  --text-starlight: #eef4fa;
+  --text-muted: #8e9aaa;
+  --text-faint: #5b6574;
+
+  /* signal — used sparingly: live telemetry, lock, trajectory, selection, status */
+  --signal-cyan: #70d7ff;
+  --signal-amber: #ffca73;
+  --signal-green: #77e6a7;
+  --signal-warn: #e7a25c;
+  --signal-error: #e0786c;
+
+  /* lines */
+  --line-subtle: rgba(238, 244, 250, 0.09);
+  --line: rgba(238, 244, 250, 0.16);
+  --line-strong: rgba(238, 244, 250, 0.32);
+  --grid-opacity: 0.08;
+
+  /* spacing (4px base) */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 72px;
+
+  /* corners — never 24px on everything */
+  --radius-hair: 2px;
+  --radius-soft: 6px;
+  --radius-round: 10px;
+
+  /* type */
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --track-label: 0.16em;
+  --track-word: 0.32em;
+
+  /* motion */
+  --ease-instrument: cubic-bezier(0.22, 0.8, 0.24, 1);
+  --ease-orbit: cubic-bezier(0.45, 0, 0.2, 1);
+  --dur-quick: 160ms;
+  --dur-base: 320ms;
+  --dur-slow: 640ms;
+
+  /* safe areas */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+
+  --touch: 44px;
+  color-scheme: dark;
+}
+
+/* Theme contrast setting */
+:root[data-contrast='high'] {
+  --text-muted: #b9c3cf;
+  --text-faint: #8e9aaa;
+  --line-subtle: rgba(238, 244, 250, 0.18);
+  --line: rgba(238, 244, 250, 0.3);
+  --line-strong: rgba(238, 244, 250, 0.55);
+  --grid-opacity: 0.16;
+}

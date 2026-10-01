@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en" data-contrast="standard">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- CSP -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>SkyTrace — Find what crossed your sky</title>
+    <meta name="description" content="Point your phone at the sky. SkyTrace reconstructs recent satellite paths through that exact field." />
+    <meta name="theme-color" content="#05070B" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SkyTrace" />
+  </head>
+  <body>
+    <!-- Environment: camera backdrop, procedural sky, grain -->
+    <video id="camera" class="env-camera" playsinline muted aria-hidden="true"></video>
+    <canvas id="sky" class="env-sky" aria-hidden="true"></canvas>
+    <div class="env-grain" aria-hidden="true"></div>
+
+    <a class="skip-link" href="#scanner-trace">Skip to trace control</a>
+
+    <main id="app">
+      <!-- 01 · SPLASH -->
+      <section id="screen-splash" class="screen splash" aria-label="SkyTrace is starting">
+        <svg class="splash-orbit" viewBox="0 0 320 120" aria-hidden="true">
+          <path id="splash-arc" d="M 10 104 Q 160 -28 310 104" fill="none" />
+          <circle class="splash-sat" r="2.4" cx="10" cy="104" />
+        </svg>
+        <h1 class="wordmark splash-word">SKYTRACE</h1>
+        <p class="splash-utc mono" aria-live="off"><span data-utc>00:00:00</span> UTC</p>
+      </section>
+
+      <!-- 02 + 36 · HOME / ONBOARDING -->
+      <section id="screen-home" class="screen home" hidden aria-labelledby="home-headline">
+        <header class="home-top">
+          <span class="wordmark small">SKYTRACE</span>
+          <span class="label">SATELLITE TRACE INSTRUMENT</span>
+        </header>
+
+        <div class="home-instrument" aria-hidden="true">
+          <svg class="home-reticle" viewBox="-120 -120 240 240">
+            <circle r="112" class="r-outer" />
+            <circle r="74" class="r-field" />
+            <g class="r-ticks"></g>
+            <path class="r-trace" d="M -118 52 Q -10 -6 118 -64" />
+            <circle class="r-sat" r="2.6" />
+            <line x1="-8" x2="8" y1="0" y2="0" class="r-cross" />
+            <line y1="-8" y2="8" x1="0" x2="0" class="r-cross" />
+          </svg>
+          <p class="home-coords mono"><span data-home-az>AZ 247.3°</span><span data-home-el>EL 61.8°</span></p>
+        </div>
+
+        <div class="home-copy">
+          <h2 id="home-headline" class="headline">FIND WHAT CROSSED YOUR SKY.</h2>
+          <p class="lede">Point your phone toward the sky. SkyTrace reconstructs recent satellite paths through that field.</p>
+          <button class="btn btn-primary" data-action="begin">BEGIN SKY TRACE</button>
+        </div>
+
+        <ol class="sequence" aria-label="How SkyTrace works">
+          <li class="seq-step">
+            <span class="seq-node" aria-hidden="true"></span>
+            <span class="seq-name mono">01 · ORIENT</span>
+            <span class="seq-text">Your position and the direction your phone points become an azimuth and elevation.</span>
+          </li>
+          <li class="seq-step">
+            <span class="seq-node" aria-hidden="true"></span>
+            <span class="seq-name mono">02 · TRACE</span>
+            <span class="seq-text">Published orbital elements are propagated through the search window, on this device.</span>
+          </li>
+          <li class="seq-step">
+            <span class="seq-node" aria-hidden="true"></span>
+            <span class="seq-name mono">03 · IDENTIFY</span>
+            <span class="seq-text">Every tracked object whose path entered your field is placed on a timeline.</span>
+          </li>
+          <svg class="seq-line" viewBox="0 0 40 300" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M 20 0 C 4 70, 36 150, 20 300" />
+          </svg>
+        </ol>
+        <p class="privacy-line mono">YOUR POSITION STAYS ON THIS DEVICE</p>
+      </section>
+
+      <!-- 03 · PERMISSIONS -->
+      <section id="screen-permissions" class="screen permissions" hidden aria-labelledby="perm-title">
+        <header class="screen-head">
+          <span class="wordmark small">SKYTRACE</span>
+          <h2 id="perm-title" class="label">INSTRUMENT SETUP</h2>
+        </header>
+        <h3 class="perm-headline">POINT. TRACE. IDENTIFY.</h3>
+        <ul class="perm-list">
+          <li class="perm" data-perm="location">
+            <div class="perm-meta">
+              <span class="perm-name mono">LOCATION</span>
+              <span class="perm-state mono" data-state>REQUIRED</span>
+            </div>
+            <p>Required to calculate the sky as seen from your position.</p>
+            <button class="btn" data-action="perm-location">ENABLE LOCATION</button>
+            <details class="perm-manual">
+              <summary>Enter coordinates instead</summary>
+              <form class="coord-form" data-coord-form novalidate>
+                <label>LAT <input name="lat" inputmode="decimal" placeholder="6.9271" required /></label>
+                <label>LON <input name="lon" inputmode="decimal" placeholder="79.8612" required /></label>
+                <button class="btn" type="submit">USE</button>
+              </form>
+            </details>
+          </li>
+          <li class="perm" data-perm="orientation">
+            <div class="perm-meta">
+              <span class="perm-name mono">ORIENTATION</span>
+              <span class="perm-state mono" data-state>REQUIRED</span>
+            </div>
+            <p>Required to determine exactly where your phone is pointing.</p>
+            <button class="btn" data-action="perm-orientation">ENABLE SKY SENSORS</button>
+          </li>
+          <li class="perm" data-perm="camera">
+            <div class="perm-meta">
+              <span class="perm-name mono">CAMERA</span>
+              <span class="perm-state mono" data-state>OPTIONAL</span>
+            </div>
+            <p>Optional. Used only as a visual sky background. Never recorded or uploaded.</p>
+            <button class="btn btn-quiet" data-action="perm-camera">ENABLE CAMERA</button>
+          </li>
+        </ul>
+        <div class="perm-actions">
+          <button class="btn btn-primary" data-action="open-scanner" disabled>OPEN SCANNER</button>
+          <button class="btn btn-quiet" data-action="open-manual">USE MANUAL SKY SELECTOR</button>
+        </div>
+        <p class="privacy-line mono">YOUR POSITION STAYS ON THIS DEVICE · NO ACCOUNT · NO MICROPHONE</p>
+      </section>
+
+      <!-- 04/05/08 · LIVE SKY SCANNER (+ scanning state, + trajectory replay) -->
+      <section id="screen-scanner" class="screen scanner" hidden aria-label="Live sky scanner" data-mode="live">
+        <header class="sc-brand">
+          <span class="wordmark small">SKYTRACE</span>
+          <span class="sc-mode mono" data-scan-mode>LIVE TRACE</span>
+          <span class="sc-data mono" data-orbit-status>LOADING ORBITS</span>
+        </header>
+
+        <div class="sc-status" data-sensor-status role="group" aria-label="Sensor status"></div>
+
+        <div class="compass-arc" data-compass aria-hidden="true"></div>
+        <div class="elev-scale" data-elev aria-hidden="true"></div>
+
+        <div class="reticle-wrap" data-reticle aria-hidden="true"></div>
+        <p class="reticle-state mono" data-reticle-state aria-live="polite">SEARCHING</p>
+
+        <div class="manual-map" data-manual-map hidden></div>
+
+        <div class="sc-telemetry mono" aria-label="Telemetry">
+          <dl>
+            <div><dt>AZ</dt><dd data-t-az>---.-°</dd></div>
+            <div><dt>EL</dt><dd data-t-el>--.-°</dd></div>
+            <div><dt>FOV</dt><dd data-t-fov>12.0°</dd></div>
+            <div><dt>UTC</dt><dd data-t-utc>00:00:00</dd></div>
+          </dl>
+        </div>
+
+        <div class="sc-center">
+          <button class="sighting-link mono" data-action="sighting">WHAT DID I JUST SEE?</button>
+          <button id="scanner-trace" class="trace-btn" data-action="trace" aria-describedby="trace-hint">
+            <svg class="trace-ring" viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="46" class="tr-ring" />
+              <circle cx="50" cy="50" r="5" class="tr-core" />
+              <g class="tr-orbiter"><circle cx="50" cy="4" r="2.2" /></g>
+            </svg>
+            <span class="trace-label mono" data-trace-label>TRACE THIS SKY</span>
+          </button>
+          <p id="trace-hint" class="sr-only">Freezes the current pointing direction and searches for satellites that crossed it.</p>
+        </div>
+
+        <div class="sc-tools">
+          <button class="icon-btn" data-action="manual" aria-label="Manual sky selector" aria-pressed="false" data-icon="crosshair"></button>
+          <button class="icon-btn" data-action="camera" aria-label="Camera background" aria-pressed="false" data-icon="camera"></button>
+          <button class="icon-btn" data-action="settings" aria-label="Settings" data-icon="settings"></button>
+        </div>
+
+        <!-- scanning state overlay -->
+        <div class="scan-overlay" data-scan-overlay hidden aria-live="polite">
+          <p class="scan-title mono">TRACING ORBITAL PATHS</p>
+          <p class="scan-count mono"><span data-scan-count>0</span> OBJECTS CHECKED</p>
+          <p class="scan-flash mono" data-scan-flash></p>
+          <button class="btn btn-quiet small" data-action="cancel-trace">CANCEL</button>
+        </div>
+
+        <!-- trajectory replay controls -->
+        <div class="replay-bar" data-replay hidden>
+          <div class="replay-head">
+            <span class="mono replay-name" data-replay-name></span>
+            <button class="icon-btn small" data-action="replay-close" aria-label="Close replay" data-icon="x"></button>
+          </div>
+          <div class="replay-times mono">
+            <span data-replay-start></span><span data-replay-now class="replay-now"></span><span data-replay-end></span>
+          </div>
+          <div class="replay-controls">
+            <button class="icon-btn" data-action="replay-toggle" aria-label="Pause replay" data-icon="pause"></button>
+            <input type="range" class="scrub" min="0" max="1000" value="0" step="1" data-replay-scrub aria-label="Scrub replay time" />
+            <button class="icon-btn" data-action="replay-again" aria-label="Replay from start" data-icon="rotate-ccw"></button>
+          </div>
+        </div>
+
+        <!-- calibration + sensor prompts -->
+        <div class="notice" data-calibration hidden role="status">
+          <svg viewBox="0 0 60 30" class="fig8" aria-hidden="true"><path d="M30 15 C 20 0, 4 0, 4 15 S 20 30, 30 15 S 56 0, 56 15 S 40 30, 30 15" /><circle r="2" /></svg>
+          <div>
+            <p class="mono notice-title">CALIBRATION NEEDED</p>
+            <p>Move your phone in a figure-eight motion, then point toward the sky again.</p>
+          </div>
+          <button class="icon-btn small" data-action="dismiss-calibration" aria-label="Dismiss" data-icon="x"></button>
+        </div>
+        <div class="notice" data-sensor-prompt hidden role="status">
+          <div>
+            <p class="mono notice-title" data-sensor-title>SKY SENSORS OFF</p>
+            <p data-sensor-text>Orientation sensors are needed to follow where your phone points.</p>
+          </div>
+          <button class="btn small" data-action="perm-orientation">ENABLE SKY SENSORS</button>
+        </div>
+      </section>
+
+      <!-- 06 + 09 · TRACE RESULTS / NEXT CROSSINGS -->
+      <section id="sheet-results" class="sheet results" hidden aria-labelledby="results-title" tabindex="-1">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <header class="results-head">
+          <div>
+            <h2 id="results-title" class="mono results-title" data-results-title>TRACE COMPLETE</h2>
+            <p class="results-sub" data-results-sub></p>
+            <p class="trace-id mono" data-trace-id></p>
+          </div>
+          <button class="icon-btn" data-action="close-results" aria-label="Back to scanner" data-icon="x"></button>
+        </header>
+        <div class="results-controls">
+          <div class="switch" role="tablist" aria-label="Crossing list">
+            <button role="tab" aria-selected="true" data-list="past" class="mono">PREVIOUS</button>
+            <button role="tab" aria-selected="false" data-list="upcoming" class="mono">NEXT</button>
+          </div>
+          <div class="switch sort" role="radiogroup" aria-label="Order" data-sort-group>
+            <button role="radio" aria-checked="true" data-sort="recent" class="mono">RECENT</button>
+            <button role="radio" aria-checked="false" data-sort="closest" class="mono">CLOSEST</button>
+            <button role="radio" aria-checked="false" data-sort="visible" class="mono">VISIBLE</button>
+          </div>
+        </div>
+        <p class="data-note mono" data-data-note></p>
+        <div class="timeline-host" data-timeline></div>
+      </section>
+
+      <!-- 07 · SATELLITE DETAIL -->
+      <section id="screen-detail" class="sheet detail" hidden aria-labelledby="detail-name" tabindex="-1">
+        <header class="detail-head">
+          <button class="icon-btn" data-action="close-detail" aria-label="Back to timeline" data-icon="chevron-left"></button>
+          <span class="label" data-detail-kicker>CLOSEST TRACKED CROSSING</span>
+          <button class="icon-btn" data-action="save-sat" aria-label="Save satellite" aria-pressed="false" data-icon="bookmark"></button>
+        </header>
+        <h2 id="detail-name" class="detail-name" data-detail-name></h2>
+        <p class="detail-ids mono" data-detail-ids></p>
+        <div class="orbit-diagram" data-orbit-diagram aria-hidden="true"></div>
+        <dl class="readout" data-readout></dl>
+        <p class="data-note mono" data-detail-note></p>
+        <div class="detail-actions">
+          <button class="btn btn-primary" data-action="replay">REPLAY PATH ACROSS FIELD</button>
+        </div>
+      </section>
+
+      <!-- 10 · SETTINGS -->
+      <section id="sheet-settings" class="sheet settings" hidden aria-labelledby="settings-title" tabindex="-1">
+        <header class="results-head">
+          <h2 id="settings-title" class="mono results-title">INSTRUMENT SETTINGS</h2>
+          <button class="icon-btn" data-action="close-settings" aria-label="Close settings" data-icon="x"></button>
+        </header>
+        <div data-settings-body></div>
+      </section>
+
+      <!-- V1.5 · WHAT DID I JUST SEE? -->
+      <section id="sheet-sighting" class="sheet sighting" hidden aria-labelledby="sighting-title" tabindex="-1">
+        <header class="results-head">
+          <div>
+            <h2 id="sighting-title" class="mono results-title">WHAT DID I JUST SEE?</h2>
+            <p class="results-sub">Point toward where the light moved, then describe it.</p>
+          </div>
+          <button class="icon-btn" data-action="close-sighting" aria-label="Close" data-icon="x"></button>
+        </header>
+        <div data-sighting-body></div>
+      </section>
+    </main>
+
+    <!-- banners: offline cache, install, update -->
+    <div class="banners" data-banners aria-live="polite"></div>
+    <div class="toasts" data-toasts aria-live="polite"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

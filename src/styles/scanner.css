@@ -1,0 +1,205 @@
+/* ───────────────────────── live sky scanner ───────────────────────── */
+.scanner { --cy: 42%; padding: 0; }
+
+.sc-brand {
+  position: absolute;
+  top: calc(var(--safe-top) + var(--space-4));
+  left: calc(var(--safe-left) + var(--space-4));
+  display: grid;
+  gap: 3px;
+}
+.sc-mode { font-size: 10.5px; letter-spacing: var(--track-label); color: var(--signal-cyan); display: flex; align-items: center; gap: 6px; }
+.sc-mode::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; animation: live-pulse 2.4s var(--ease-orbit) infinite; }
+.scanner[data-mode='locked'] .sc-mode, .scanner[data-mode='replay'] .sc-mode { color: var(--signal-amber); }
+.scanner[data-mode='manual'] .sc-mode { color: var(--text-starlight); }
+.sc-data { font-size: 9.5px; letter-spacing: 0.1em; color: var(--text-faint); max-width: 46vw; }
+.sc-data[data-tone='cache'] { color: var(--signal-amber); }
+.sc-data[data-tone='sim'] { color: var(--signal-warn); }
+
+.sc-status {
+  position: absolute;
+  top: calc(var(--safe-top) + var(--space-4));
+  right: calc(var(--safe-right) + var(--space-4));
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+}
+.ss-row { display: grid; grid-template-columns: auto auto 14px; gap: var(--space-2); align-items: center; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.1em; color: var(--text-muted); }
+.ss-row .ss-val { color: var(--text-starlight); min-width: 8ch; text-align: right; }
+.ss-bars { display: flex; gap: 1.5px; align-items: end; height: 9px; }
+.ss-bars i { width: 2.5px; background: var(--line-strong); }
+.ss-bars i:nth-child(1) { height: 3px; }
+.ss-bars i:nth-child(2) { height: 6px; }
+.ss-bars i:nth-child(3) { height: 9px; }
+.ss-bars[data-level='1'] i:nth-child(-n + 1),
+.ss-bars[data-level='2'] i:nth-child(-n + 2),
+.ss-bars[data-level='3'] i:nth-child(-n + 3) { background: var(--text-starlight); }
+.ss-row[data-tone='good'] .ss-bars i { background-color: var(--line-strong); }
+.ss-row[data-tone='good'] .ss-bars[data-level] i:nth-child(-n + 3) { background: var(--signal-green); }
+.ss-row[data-tone='fair'] .ss-bars i:nth-child(-n + 2) { background: var(--signal-amber); }
+.ss-row[data-tone='poor'] .ss-bars i:nth-child(1) { background: var(--signal-error); }
+
+/* compass arc — only a local arc around the current heading */
+.compass-arc {
+  position: absolute;
+  top: calc(var(--safe-top) + 84px);
+  left: 50%;
+  width: min(340px, calc(100% - 48px));
+  height: 38px;
+  transform: translateX(-50%);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 22%, #000 78%, transparent);
+}
+.compass-arc svg { position: absolute; top: 0; left: 0; height: 38px; overflow: visible; will-change: transform; }
+.compass-arc line { stroke: var(--line-strong); stroke-width: 1; }
+.compass-arc line.major { stroke: var(--text-muted); }
+.compass-arc text { font-family: var(--font-mono); font-size: 10px; fill: var(--text-muted); text-anchor: middle; letter-spacing: 0.06em; }
+.compass-arc text.cardinal { fill: var(--text-starlight); }
+.compass-arc text.north { fill: var(--signal-amber); }
+.compass-needle { position: absolute; top: calc(var(--safe-top) + 80px); left: 50%; width: 0; height: 0; transform: translateX(-50%); border: 4px solid transparent; border-top: 5px solid var(--signal-cyan); }
+
+/* elevation scale */
+.elev-scale {
+  position: absolute;
+  right: calc(var(--safe-right) + 10px);
+  top: calc(var(--cy) - 21vh);
+  height: 42vh;
+  width: 44px;
+}
+.elev-scale svg { width: 100%; height: 100%; overflow: visible; }
+.elev-scale line { stroke: var(--line-strong); }
+.elev-scale text { font-family: var(--font-mono); font-size: 9px; fill: var(--text-faint); text-anchor: end; dominant-baseline: middle; }
+.elev-scale .el-marker { fill: var(--signal-cyan); }
+.elev-scale .el-value { fill: var(--signal-cyan); font-size: 9.5px; }
+
+/* reticle */
+.reticle-wrap { position: absolute; left: calc(50% + var(--cx-shift, 0px)); top: var(--cy); width: 0; height: 0; }
+.reticle-wrap svg { position: absolute; overflow: visible; left: 0; top: 0; }
+.ret-field { fill: none; stroke: var(--text-starlight); stroke-width: 1; opacity: 0.85; }
+.ret-field-dash { fill: none; stroke: var(--text-starlight); stroke-width: 1; stroke-dasharray: 1 5; opacity: 0.45; }
+.ret-outer { fill: none; stroke: var(--line-strong); stroke-width: 1; }
+.ret-scale line { stroke: var(--line-strong); }
+.ret-core { fill: var(--text-starlight); }
+.ret-cross { stroke: var(--text-starlight); stroke-width: 1; }
+.ret-bracket { fill: none; stroke: var(--text-starlight); stroke-width: 1.2; }
+.ret-uncert { fill: rgba(112, 215, 255, 0.05); stroke: rgba(112, 215, 255, 0.28); stroke-dasharray: 2 3; }
+.reticle-wrap[data-state='stable'] .ret-bracket, .reticle-wrap[data-state='stable'] .ret-field { stroke: var(--signal-cyan); }
+.reticle-wrap[data-state='locked'] .ret-bracket, .reticle-wrap[data-state='locked'] .ret-field, .reticle-wrap[data-state='locked'] .ret-cross { stroke: var(--signal-amber); }
+.reticle-wrap[data-state='locked'] .ret-core { fill: var(--signal-amber); }
+.reticle-wrap[data-state='low'] .ret-field { stroke-dasharray: 3 4; opacity: 0.6; }
+.reticle-state {
+  position: absolute; left: 50%; top: var(--cy);
+  transform: translate(-50%, calc(var(--ring-r, 90px) + 46px));
+  font-size: 10px; letter-spacing: var(--track-label); color: var(--text-muted);
+  white-space: nowrap;
+}
+.reticle-state[data-tone='stable'] { color: var(--signal-cyan); }
+.reticle-state[data-tone='locked'] { color: var(--signal-amber); }
+.reticle-state[data-tone='low'] { color: var(--signal-warn); }
+
+/* telemetry */
+.sc-telemetry { position: absolute; left: calc(var(--safe-left) + var(--space-4)); bottom: calc(var(--safe-bottom) + var(--space-5)); }
+.sc-telemetry dl { display: grid; gap: 3px; }
+.sc-telemetry dl > div { display: grid; grid-template-columns: 34px 64px; align-items: baseline; }
+.sc-telemetry dt { font-size: 9.5px; letter-spacing: var(--track-label); color: var(--text-faint); }
+.sc-telemetry dd { font-size: 13px; text-align: right; color: var(--text-starlight); }
+.sc-telemetry [data-t-az], .sc-telemetry [data-t-el] { color: var(--signal-cyan); }
+.scanner[data-mode='locked'] .sc-telemetry [data-t-az], .scanner[data-mode='locked'] .sc-telemetry [data-t-el],
+.scanner[data-mode='replay'] .sc-telemetry [data-t-az], .scanner[data-mode='replay'] .sc-telemetry [data-t-el] { color: var(--signal-amber); }
+
+/* trace button */
+.sc-center { position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + var(--space-4)); transform: translateX(-50%); display: grid; justify-items: center; gap: var(--space-2); }
+.sighting-link { font-size: 9.5px; letter-spacing: var(--track-label); color: var(--text-faint); min-height: 32px; padding: 0 var(--space-2); }
+.sighting-link:hover, .sighting-link[aria-pressed='true'] { color: var(--signal-cyan); }
+.trace-btn { display: grid; justify-items: center; gap: 6px; min-width: 120px; padding: 2px; }
+.trace-ring { width: 74px; height: 74px; overflow: visible; transition: transform var(--dur-quick) var(--ease-instrument); }
+.tr-ring { fill: rgba(9, 13, 20, 0.5); stroke: var(--text-starlight); stroke-width: 1.2; }
+.tr-core { fill: var(--text-starlight); transition: r var(--dur-base); }
+.tr-orbiter circle { fill: var(--signal-cyan); }
+.tr-orbiter { transform-origin: 50px 50px; animation: orbiter 5s var(--ease-orbit) infinite; }
+.trace-btn:hover .tr-ring { stroke: var(--signal-cyan); }
+.trace-btn:active .trace-ring { transform: scale(0.975); }
+.trace-btn:disabled { opacity: 0.4; }
+.trace-label { font-size: 10.5px; letter-spacing: var(--track-label); }
+.ring-ghost { position: fixed; z-index: 20; pointer-events: none; border: 1px solid var(--signal-cyan); border-radius: 50%; }
+
+.sc-tools { position: absolute; right: calc(var(--safe-right) + var(--space-2)); bottom: calc(var(--safe-bottom) + var(--space-4)); display: grid; gap: 2px; }
+
+/* scanning state */
+.scan-overlay { position: absolute; left: 0; right: 0; top: var(--cy); transform: translateY(calc(var(--ring-r, 90px) + 70px)); display: grid; justify-items: center; gap: 4px; text-align: center; pointer-events: none; }
+.scan-overlay .btn { pointer-events: auto; margin-top: var(--space-2); }
+.scan-title { font-size: 11px; letter-spacing: var(--track-label); color: var(--signal-amber); }
+.scan-count { font-size: 11px; letter-spacing: 0.1em; color: var(--text-muted); }
+.scan-count span { color: var(--text-starlight); }
+.scan-flash { font-size: 9.5px; color: var(--text-faint); letter-spacing: 0.08em; min-height: 1.4em; }
+.scanner[data-busy='true'] .sc-center,
+.scanner[data-busy='true'] .sc-tools,
+.scanner[data-mode='replay'] .sc-center,
+.scanner[data-mode='replay'] .sc-tools,
+.scanner[data-mode='replay'] .reticle-state,
+.scanner[data-sheet='true'] .sc-center,
+.scanner[data-sheet='true'] .sc-tools,
+.scanner[data-sheet='true'] .sc-telemetry { opacity: 0; pointer-events: none; transition: opacity var(--dur-base); }
+.scanner[data-sheet='true'] .elev-scale, .scanner[data-sheet='true'] .compass-arc, .scanner[data-sheet='true'] .reticle-state, .scanner[data-sheet='true'] .compass-needle { opacity: 0; }
+
+/* manual sky selector */
+.manual-map { position: absolute; left: 50%; top: var(--cy); transform: translate(-50%, -50%); width: min(78vw, 46vh, 420px); aspect-ratio: 1; touch-action: none; }
+.manual-map svg { width: 100%; height: 100%; overflow: visible; cursor: grab; }
+.manual-map svg:active { cursor: grabbing; }
+.mm-ring { fill: none; stroke: var(--line); }
+.mm-ring.horizon { stroke: var(--line-strong); }
+.mm-spoke { stroke: var(--line-subtle); }
+.mm-label { font-family: var(--font-mono); font-size: 10px; fill: var(--text-muted); text-anchor: middle; dominant-baseline: middle; }
+.mm-label.n { fill: var(--signal-amber); }
+.mm-el { font-family: var(--font-mono); font-size: 8px; fill: var(--text-faint); }
+.mm-target { fill: rgba(112, 215, 255, 0.08); stroke: var(--signal-cyan); }
+.mm-dot { fill: var(--signal-cyan); }
+.mm-focus { fill: none; stroke: var(--signal-cyan); stroke-dasharray: 2 3; opacity: 0; }
+.manual-map svg:focus-visible .mm-focus { opacity: 1; }
+.manual-map svg:focus-visible { outline: none; }
+.scanner[data-mode='manual'] .reticle-wrap, .scanner[data-mode='manual'] .reticle-state, .scanner[data-mode='manual'] .elev-scale, .scanner[data-mode='manual'] .compass-arc, .scanner[data-mode='manual'] .compass-needle { display: none; }
+
+/* replay */
+.replay-bar {
+  position: absolute; left: 50%; bottom: calc(var(--safe-bottom) + var(--space-4)); transform: translateX(-50%);
+  width: min(440px, calc(100% - 32px)); padding: var(--space-3) var(--space-3) var(--space-2);
+  background: rgba(9, 13, 20, 0.86); border: 1px solid var(--line); border-radius: var(--radius-hair);
+}
+.replay-head { display: flex; justify-content: space-between; align-items: center; }
+.replay-name { font-size: 12px; letter-spacing: 0.08em; color: var(--signal-amber); }
+.replay-times { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--text-muted); margin-top: var(--space-1); }
+.replay-now { color: var(--text-starlight); }
+.replay-controls { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-2); }
+.scrub { width: 100%; accent-color: var(--signal-amber); min-height: var(--touch); }
+.scanner[data-mode='replay'] .sc-telemetry { bottom: calc(var(--safe-bottom) + 150px); }
+
+/* notices */
+.notice {
+  position: absolute; left: 50%; top: calc(var(--safe-top) + 132px); transform: translateX(-50%);
+  width: min(420px, calc(100% - 32px));
+  display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: center;
+  padding: var(--space-3); background: rgba(9, 13, 20, 0.9); border: 1px solid var(--line); border-left: 2px solid var(--signal-warn); border-radius: var(--radius-hair);
+}
+.notice[data-sensor-prompt] { grid-template-columns: 1fr auto; border-left-color: var(--signal-cyan); }
+.notice p { font-size: 12.5px; color: var(--text-muted); }
+.notice .notice-title { font-size: 10.5px; letter-spacing: var(--track-label); color: var(--text-starlight); }
+.fig8 { width: 48px; height: 24px; overflow: visible; }
+.fig8 path { fill: none; stroke: var(--line-strong); }
+.fig8 circle { fill: var(--signal-warn); offset-path: path('M30 15 C 20 0, 4 0, 4 15 S 20 30, 30 15 S 56 0, 56 15 S 40 30, 30 15'); animation: fig8 3.2s linear infinite; }
+
+@media (max-height: 640px) {
+  .compass-arc { top: calc(var(--safe-top) + 64px); }
+  .compass-needle { top: calc(var(--safe-top) + 60px); }
+  .trace-ring { width: 60px; height: 60px; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .scanner { --cy: 50%; }
+  .compass-arc { top: calc(var(--safe-top) + 10px); width: min(300px, 40vw); }
+  .compass-needle { top: calc(var(--safe-top) + 6px); }
+  .sc-center { left: auto; right: calc(var(--safe-right) + 64px); transform: none; }
+  .elev-scale { right: calc(var(--safe-right) + 168px); }
+}
+
+/* instrument SVGs size themselves; never clamp them to their zero-size anchors */
+.reticle-wrap svg, .compass-arc svg, .elev-scale svg { max-width: none; }

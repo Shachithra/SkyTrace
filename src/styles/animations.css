@@ -1,0 +1,31 @@
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+/* idle trace button: one orbit around the rim, then a long rest (~5 s cycle) */
+@keyframes orbiter {
+  0% { transform: rotate(0deg); opacity: 0; }
+  6% { opacity: 1; }
+  34% { transform: rotate(360deg); opacity: 1; }
+  40%, 100% { transform: rotate(360deg); opacity: 0; }
+}
+@keyframes fig8 { to { offset-distance: 100%; } }
+@keyframes empty-orbit { from { offset-distance: 0%; } to { offset-distance: 100%; } }
+@keyframes rise-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+.fade-enter { animation: rise-in var(--dur-base) var(--ease-instrument) both; }
+
+/* Reduced motion: no parallax, no long orbit animations, no large transforms.
+   Simple opacity transitions and status changes remain. */
+:root.reduce-motion *,
+:root.reduce-motion *::before,
+:root.reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+}
+:root.reduce-motion .tr-orbiter { display: none; }
+:root.reduce-motion .sc-mode::before { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  :root:not(.motion-forced) .tr-orbiter { display: none; }
+}
