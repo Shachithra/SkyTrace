@@ -342,7 +342,7 @@ function describe(
   const startAz = riseAz ?? (motionDeg < 0.5 ? null : first.az);
   const endAz = setAz ?? (motionDeg < 0.5 ? null : last.az);
 
-  const vis = assessVisibility(frame, instant(closest.t), closest.look.eci, closest.look.el, closest.look.rangeKm);
+  const vis = assessVisibility(frame, instant(closest.t), closest.look.eci, closest.look.el, closest.look.rangeKm, body.rec);
 
   return {
     satelliteId: body.id,
@@ -373,6 +373,7 @@ function describe(
     visibilityReason: vis.reason,
     sunElevation: vis.sunElevation,
     illuminated: vis.illuminated,
+    estMagnitude: vis.estMagnitude,
     durationS: durationMs / 1000,
     path,
     score: 0,
@@ -385,7 +386,7 @@ function relevance(c: Crossing, radius: number, now: number, windowMs: number): 
   const timing = 1 - clamp(Math.abs(now - c.closestTime) / windowMs, 0, 1);
   const duration = clamp(c.durationS / 30, 0, 1);
   const elevation = clamp(c.closestElevation / 90, 0, 1);
-  const visible = c.visibility === 'LIKELY_VISIBLE' ? 1 : 0;
+  const visible = c.visibility === 'LIKELY_VISIBLE' ? 1 : c.visibility === 'POSSIBLY_VISIBLE' ? 0.5 : 0;
   return 0.4 * closeness + 0.15 * timing + 0.1 * duration + 0.1 * elevation + 0.25 * visible;
 }
 
@@ -393,7 +394,7 @@ function scoreSighting(c: Crossing, radius: number, s: SightingQuery): void {
   const closeness = 1 - clamp(c.minAngularDistance / radius, 0, 1);
   const timing = 1 - clamp(Math.abs(c.closestTime - s.time) / (s.toleranceS * 1000), 0, 1);
   const direction = s.direction === null ? 0.5 : (1 + Math.cos(((c.travelBearing - s.direction) * Math.PI) / 180)) / 2;
-  const visible = c.visibility === 'LIKELY_VISIBLE' ? 1 : 0.25;
+  const visible = c.visibility === 'LIKELY_VISIBLE' ? 1 : c.visibility === 'POSSIBLY_VISIBLE' ? 0.6 : 0.25;
   c.matchScore = 0.35 * closeness + 0.25 * timing + 0.25 * direction + 0.15 * visible;
 }
 

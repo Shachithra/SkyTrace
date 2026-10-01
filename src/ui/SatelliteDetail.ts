@@ -1,5 +1,5 @@
 import type { Crossing, SatelliteInfo } from '../astronomy/types.ts';
-import { VISIBILITY_NOTE } from '../astronomy/visibility.ts';
+import { LABEL_TEXT, VISIBILITY_NOTE } from '../astronomy/visibility.ts';
 import type { SatelliteMetadata } from '../data/indexedDb.ts';
 import { ago, fmtDistance, fmtLatLon, fmtSpeed, inTime, localClock, type DistanceUnit } from '../utils/format.ts';
 import { $, clear, h, s, setText } from './dom.ts';
@@ -53,7 +53,7 @@ export class SatelliteDetail {
     add('Next crossing', m.nextCrossing ? `${localClock(m.nextCrossing.entryTime)} · ${inTime(m.nextCrossing.entryTime, m.now)}` : 'None predicted in look-ahead');
     add('Direction', `${c.directionLabel} · max el ${c.passMaxElevation.toFixed(0)}°`);
     add('Range at closest', fmtDistance(c.rangeKm, m.units));
-    add('Visibility', `${c.visibility === 'LIKELY_VISIBLE' ? 'LIKELY VISIBLE' : 'CROSSED FIELD'} — ${VISIBILITY_NOTE[c.visibilityReason]}`);
+    add('Visibility', `${LABEL_TEXT[c.visibility]} — ${VISIBILITY_NOTE[c.visibilityReason]}${c.estMagnitude !== null && c.estMagnitude !== undefined ? ` (est. mag ${c.estMagnitude.toFixed(1)})` : ''}`);
     if (m.meta?.launchDate) add('Launch', `${m.meta.launchDate}${m.meta.launchSite ? ` · ${m.meta.launchSite}` : ''}`);
     add('Element set age', i ? `${i.epochAgeDays.toFixed(1)} days` : null);
 

@@ -8,7 +8,7 @@ export interface SightingChoice {
   label: string;
 }
 
-type Preset = 'now' | '5' | '10' | 'custom';
+type Preset = 'now' | '5' | '10' | '30' | 'custom';
 
 /**
  * "What did I just see?" — approximate observation time + remembered movement
@@ -36,6 +36,7 @@ export class SightingPanel {
       { value: 'now', label: 'JUST NOW' },
       { value: '5', label: '5 MIN', sub: 'AGO' },
       { value: '10', label: '10 MIN', sub: 'AGO' },
+      { value: '30', label: '30 MIN', sub: 'AGO' },
       { value: 'custom', label: 'CUSTOM' },
     ], this.preset, (v) => {
       this.preset = v;
@@ -84,6 +85,9 @@ export class SightingPanel {
     } else if (this.preset === '10') {
       time = now - 10 * 60_000;
       label = '10 MIN AGO';
+    } else if (this.preset === '30') {
+      time = now - 30 * 60_000;
+      label = '30 MIN AGO';
     } else if (this.preset === 'custom' && this.custom) {
       const [hh, mm] = this.custom.split(':').map(Number);
       const d = new Date();

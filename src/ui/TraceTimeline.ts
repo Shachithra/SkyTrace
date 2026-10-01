@@ -1,5 +1,5 @@
 import type { Crossing } from '../astronomy/types.ts';
-import { VISIBILITY_NOTE } from '../astronomy/visibility.ts';
+import { LABEL_TEXT, VISIBILITY_NOTE } from '../astronomy/visibility.ts';
 import { inTime, localClock } from '../utils/format.ts';
 import { clamp } from '../utils/math.ts';
 import { clear, h } from './dom.ts';
@@ -14,6 +14,9 @@ export interface TimelineOptions {
   radius: number;
   sort: SortMode;
   sighting: boolean;
+  /** sighting mode: when the light was seen and which way it moved */
+  sightingTime?: number;
+  sightingDirection?: number | null;
   onSelect: (c: Crossing, origin: HTMLElement) => void;
 }
 
@@ -95,16 +98,27 @@ function eventEl(c: Crossing, o: TimelineOptions): HTMLElement {
   const visible = c.visibility === 'LIKELY_VISIBLE';
 
   const timeLabel = o.kind === 'upcoming' ? localClock(c.entryTime) : localClock(c.closestTime);
-  const meta = `${c.directionLabel} · closest ${c.minAngularDistance.toFixed(1)}°`;
+  let meta = `${c.directionLabel} · closest ${c.minAngularDistance.toFixed(1)}°`;
+  if (o.sighting && o.sightingTime !== undefined) {
+    // "closest path 1.8° · observed time difference 8 sec · direction match HIGH"
+    const dt = Math.round(Math.abs(c.closestTime - o.sightingTime) / 1000);
+    const dtText = dt < 120 ? `${dt} sec` : `${Math.round(dt / 60)} min`;
+    let dir = 'n/a';
+    if (o.sightingDirection !== null && o.sightingDirection !== undefined) {
+      const diff = Math.abs(((c.travelBearing - o.sightingDirection + 540) % 360) - 180);
+      dir = diff < 35 ? 'HIGH' : diff < 75 ? 'MEDIUM' : 'LOW';
+    }
+    meta = `closest path ${c.minAngularDistance.toFixed(1)}° · time difference ${dtText} · direction match ${dir}`;
+  }
   const flagText = o.sighting && c.matchTier
     ? c.matchTier
     : o.kind === 'upcoming'
       ? `ENTERS ${inTime(c.entryTime, o.now).toUpperCase()}`
       : visible
         ? 'LIKELY VISIBLE'
-        : 'CROSSED FIELD';
-  const tone = o.sighting ? 'match' : visible ? 'visible' : '';
-  const glyph = visible ? '◆' : '○';
+        : LABEL_TEXT[c.visibility];
+  const tone = o.sighting ? 'match' : visible ? 'visible' : c.visibility === 'POSSIBLY_VISIBLE' ? 'possible' : '';
+  const glyph = visible ? '◆' : c.visibility === 'POSSIBLY_VISIBLE' ? '◇' : '○';
   const extras: string[] = [];
   if (c.inFieldAtStart && o.kind === 'past') extras.push('IN FIELD AT WINDOW START');
   if (c.inFieldAtEnd && o.kind === 'past') extras.push('STILL IN FIELD');

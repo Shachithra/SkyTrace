@@ -1,5 +1,7 @@
 import { DEFAULT_DATASETS } from './datasets.ts';
 import { getMeta, setMeta } from './indexedDb.ts';
+import type { MagnitudeFilter } from '../stars/visibility.ts';
+import type { NightMode } from '../ui/palette.ts';
 
 export type WindowMinutes = 15 | 30 | 60 | 180;
 export type FieldRadius = 3 | 6 | 12;
@@ -19,6 +21,16 @@ export interface Settings {
   onboarded: boolean;
   installDismissed: boolean;
   savedSatellites: number[];
+  /** V2 */
+  nightMode: NightMode;
+  magnitudeFilter: MagnitudeFilter;
+  layers: { satellites: boolean; stars: boolean; constellations: boolean; labels: boolean; trajectories: boolean };
+  satFilter: 'ALL' | 'VISIBLE' | 'STATIONS' | 'STARLINK' | 'WEATHER' | 'NAVIGATION' | 'SCIENCE';
+  /** camera vertical field of view for the AR overlay, degrees */
+  arFov: number;
+  /** store latitude/longitude with trace & observation history (off by default) */
+  storeLocationHistory: boolean;
+  passMinElevation: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -32,10 +44,17 @@ export const DEFAULT_SETTINGS: Settings = {
   datasets: [...DEFAULT_DATASETS],
   contrast: 'standard',
   refreshHours: 6,
-  keepHistory: false,
+  keepHistory: true,
   onboarded: false,
   installDismissed: false,
   savedSatellites: [],
+  nightMode: 'off',
+  magnitudeFilter: 'STANDARD',
+  layers: { satellites: true, stars: true, constellations: true, labels: true, trajectories: true },
+  satFilter: 'ALL',
+  arFov: 36,
+  storeLocationHistory: false,
+  passMinElevation: 10,
 };
 
 type Listener = (s: Settings, changed: (keyof Settings)[]) => void;
@@ -75,30 +94,4 @@ export function prefersReducedMotion(): boolean {
   if (m === 'on') return true;
   if (m === 'off') return false;
   return typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-/** Trace history is opt-in and never stores the observer's position. */
-export interface HistoryEntry {
-  traceId: string;
-  time: number;
-  azimuth: number;
-  elevation: number;
-  radius: number;
-  windowMin: number;
-  matches: { name: string; catalogId: number; closestTime: number }[];
-}
-
-export async function appendHistory(e: HistoryEntry): Promise<void> {
-  if (!settings.get().keepHistory) return;
-  const list = (await getMeta<HistoryEntry[]>('history')) ?? [];
-  list.unshift(e);
-  await setMeta('history', list.slice(0, 50));
-}
-
-export async function readHistory(): Promise<HistoryEntry[]> {
-  return (await getMeta<HistoryEntry[]>('history')) ?? [];
-}
-
-export async function clearHistory(): Promise<void> {
-  await setMeta('history', []);
 }

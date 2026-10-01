@@ -1,6 +1,7 @@
 import { sanitizeText } from '../astronomy/orbitLoader.ts';
 import { db, type SatelliteMetadata } from './indexedDb.ts';
 import { CELESTRAK_ORIGIN, satcatUrl } from './datasets.ts';
+import { supabase } from '../sync/supabase.ts';
 
 const OWNER_NAMES: Record<string, string> = {
   US: 'United States', PRC: 'China', CIS: 'Russia / CIS', ISS: 'ISS Partnership', ESA: 'European Space Agency',
@@ -17,6 +18,29 @@ export async function satelliteMetadata(catalogId: number): Promise<SatelliteMet
     /* ignore */
   }
   if (!navigator.onLine || catalogId >= 900000) return null;
+  // Public, read-only satellite_metadata table first (when sync is configured)…
+  const sb = supabase();
+  if (sb) {
+    try {
+      const { data } = await (await sb).from('satellite_metadata').select('norad_id,object_type,owner,launch_date').eq('norad_id', catalogId).maybeSingle();
+      if (data) {
+        const meta: SatelliteMetadata = {
+          catalogId,
+          owner: sanitizeText(data.owner, 40),
+          launchDate: sanitizeText(String(data.launch_date ?? ''), 12),
+          launchSite: '',
+          decayDate: '',
+          objectType: sanitizeText(data.object_type, 24),
+          fetchedAt: Date.now(),
+        };
+        await (await db()).put('satelliteMetadata', meta).catch(() => undefined);
+        return meta;
+      }
+    } catch {
+      /* fall through to CelesTrak SATCAT */
+    }
+  }
+  // …otherwise CelesTrak SATCAT.
   try {
     let res = await fetch(satcatUrl(catalogId, CELESTRAK_ORIGIN), { credentials: 'omit', referrerPolicy: 'no-referrer' });
     if (!res.ok && import.meta.env?.DEV) res = await fetch(satcatUrl(catalogId, '/celestrak'));

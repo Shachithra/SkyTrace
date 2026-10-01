@@ -1,8 +1,15 @@
-# SkyTrace
+# SkyTrace V2
 
-**Find what crossed your sky.**
+**Find what crossed your sky.** · *Know what is above you.*
 
-SkyTrace is a mobile-first Progressive Web App. Point your phone at a patch of sky and it tells you which tracked satellites crossed that exact field recently, and which will cross it next. It doesn't use computer vision. It combines your position, the phone's orientation, the current time and published orbital elements (SGP4 via `satellite.js`).
+SkyTrace is a mobile-first PWA: a live satellite observatory plus a constellation guide. It has four core experiences:
+
+- **WATCH** — Live Sky: real satellites, real stars and real constellation figures, following the direction the phone points.
+- **TRACE** — the V1 instrument: point at a patch of sky and find what crossed it.
+- **IDENTIFY** — star-pattern matching and "What did I just see?".
+- **OBSERVE** — upcoming passes, saved satellites, alerts and history.
+
+Everything runs locally on the device, with no account needed. Supabase sync and push alerts are optional extras.
 
 ---
 
@@ -13,10 +20,17 @@ npm install
 npm run dev          # http://localhost:5173 (exposed on your LAN with --host)
 npm run build        # type-check + production build into dist/
 npm run preview      # serve the production build (service worker active)
-npm run test:engine  # astronomy engine self-test in Node (no browser needed)
+npm run test:engine  # astronomy engine self-test: SGP4, sky math, constellations, pass prediction
 ```
 
 > Location, orientation and camera all need a **secure context**. Use `localhost` on desktop. To test on a phone, serve over **HTTPS**: deploy `dist/` to any static HTTPS host (Netlify, Vercel, Cloudflare Pages, GitHub Pages), or tunnel your dev server.
+
+### Rebuilding the star / constellation data
+
+```bash
+npm pack d3-celestial && tar xzf d3-celestial-*.tgz
+D3C_DIR=./package/data node scripts/build-star-data.mjs   # writes public/data/*.v1.json
+```
 
 ### Regenerating icons
 
@@ -28,6 +42,37 @@ npm run icons
 ```
 
 ---
+
+## What's new in V2
+
+| Blueprint section | Where it lives |
+|---|---|
+| Live Sky Mode: stars, constellations, satellites above the horizon, live paths, compass, elevation, horizon, UTC, sensor accuracy, "N OBJECTS ABOVE HORIZON · N LIKELY VISIBLE" | `screens/liveSky.ts`, `ui/SkyView.ts` |
+| Live satellite layer: filters ALL / VISIBLE / STATIONS / STARLINK / WEATHER / NAVIGATION / SCIENCE; small dot, short label (nearest or selected only), direction vector | `ui/SatelliteMarker.ts` |
+| Trajectories: −5 min … NOW … +5 min, dimmer past, brighter future, bright marker, pulse along visible passes | `ui/TrajectoryPath.ts`, orbit worker `TRAJECTORY` |
+| Upcoming passes: TONIGHT / NEXT 24 HOURS / FAVORITES / VISIBLE ONLY on a time-proportional timeline, with a polar sky plot per pass | `screens/passes.ts`, `ui/PassTimeline.ts`, `alerts/passPrediction.ts` |
+| Visibility model: sun altitude and twilight, Earth-shadow illumination, range, elevation, object type and known brightness, giving LIKELY / POSSIBLY / NOT EXPECTED TO BE VISIBLE | `astronomy/visibility.ts` |
+| Pass alerts: 5 / 10 / 15 / 30 min lead time, location, minimum elevation, visibility requirement, quiet hours; local notifications, app badge, optional Web Push | `alerts/*`, `ui/PassAlertControl.ts`, `public/sw-push.js`, `supabase/functions/*` |
+| What did I just see?: JUST NOW / 5 / 10 / 30 MIN AGO / CUSTOM, direction filter; reports closest path, time difference and direction match | `ui/SightingPanel.ts`, `ui/TraceTimeline.ts` |
+| Real stars: 5,044 Hipparcos stars (mag ≤ 6), precessed J2000 → date, with sidereal time, hour angle, Alt/Az and refraction | `stars/*`, `sky/*`, `workers/sky.worker.ts` |
+| Constellations: 89 IAU figures (733 segments) and real IAU boundaries; reveal animation, focus mode, labels, pattern match (MATCH HIGH / MEDIUM / LOW, no percentages) | `stars/constellationData.ts`, `stars/constellationRenderer.ts` |
+| Satellite + constellation context: "ISS CROSSING ORION · VISIBLE IN 48 SEC", "ENTERING …", "PASSING BELOW …", with a haptic pulse | `screens/liveSky.ts` (`refreshContext`) |
+| Sky info panel (AZ / EL / RA / DEC / constellation / satellites / visible); star and constellation details including rise/set and satellite crossings tonight | `screens/objectSheet.ts` |
+| Interactive all-sky map: zenith at the centre, horizon at the edge, N/E/S/W marked; drag, zoom (wheel or pinch), tap to select | `sky/skyProjection.ts` (`AllSkyProjector`) |
+| Layers strip (SATELLITES / STARS / CONSTELLATIONS / LABELS / TRAJECTORIES); magnitude filter BRIGHT / STANDARD / DEEP | `ui/LayerControl.ts`, `stars/visibility.ts` |
+| Night vision: DIM and RED LIGHT modes with slow, flash-free cross-fades | `ui/palette.ts`, `ui/NightModeControl.ts`, `styles/live.css` |
+| Camera AR overlay: darkened feed with constellations, labels, satellites and paths; field-of-view calibration | `screens/liveSky.ts` (`toggleCamera`), Settings → AR FIELD OF VIEW |
+| Saved satellites shown as 24-hour orbital timelines; saved locations (explicit and optional); observation and trace history with offline replay | `screens/saved.ts`, `screens/history.ts`, `history/*`, `sync/favorites.ts` |
+| Local-first IndexedDB (orbits, stars, constellations, settings, favourites, history, alerts, outbox) with optional Supabase sync (Auth + Postgres + RLS) | `data/indexedDb.ts`, `data/userStore.ts`, `sync/*`, `supabase/` |
+| PWA V2: app shortcuts (LIVE SKY / TRACE SKY / UPCOMING PASSES / WHAT DID I SEE?), offline star data, push, badge, update flow; offline status shows **LOCAL SKY MODE** with orbit age and star data version | `manifest.webmanifest`, `vite.config.ts`, `public/sw-push.js` |
+| Navigation: SKY / TRACE / PASSES / SAVED, with HISTORY and SETTINGS as secondary | `index.html` (`[data-nav]`), `main.ts` |
+| Workers: **orbit.worker** (propagation, live positions, pass prediction, historical crossings) and **sky.worker** (star conversion, filtering, constellation visibility and pattern lookups) | `src/workers/*` |
+
+Features deliberately held back for V3 (per blueprint §52): social feed, profiles, comments, photo uploads, gamification, AI chat, astrophotography tools.
+
+### Optional: accounts and sync
+
+See [`supabase/README.md`](supabase/README.md) for setup. Copy `.env.example` to `.env.local`, or set the same variables in Vercel. Without them, the SAVED screen shows **GUEST MODE**.
 
 ## How it works
 
@@ -115,7 +160,24 @@ If no real orbital data can be loaded (first run offline, or the source is unrea
 
 ---
 
+## V2 verification
+
+- **Engine test** (`npm run test:engine`) passes. In addition to the V1 checks, it covers:
+  - GMST against Meeus' worked example to 10⁻⁴°.
+  - Polaris and Vega precessed to 2026.
+  - The Alt/Az vector path matching the closed form to 10⁻¹⁴.
+  - Polaris altitude ≈ latitude, and the Sun at the zenith at an equinox noon.
+  - Seven bright stars landing in the right IAU constellation, including the polar ones (UMi, Oct).
+  - Pass maximum elevation matching brute force to 0.01°, and pass rise at 0.003°.
+- **Browser walkthrough** (headless Chromium, synthetic orientation, simulated orbits) went through: Live Sky (pointing and all-sky), pattern match, constellation sheet, selection with trajectory and context line, passes with pass sheet, save and alert, saved locations, trace with LOG OBSERVATION, history, red-light mode and the V2 home. No console errors.
+
 ## Honest limitations and what still needs a real phone (Phase 12)
+
+- **Supabase:** the SQL migration and Edge Functions are written but have **not** been run against a live Supabase project, and no Deno runtime was available to test them. Expect to fix small issues when you first deploy them.
+- **Visibility estimates:** standard magnitudes are known for only a few objects. Everything else is estimated from the object type, so treat LIKELY / POSSIBLY as estimates.
+- **AR overlay:** alignment depends on the phone's camera field of view and compass accuracy. Calibrate the field of view in Settings.
+- **Local alerts:** browsers only fire timer-based alerts while SkyTrace is open or recently backgrounded. Alerts with the app closed need the Web Push setup.
+
 
 - **Real-device testing is still to do.** The flows were verified in headless Chromium with synthetic orientation events and a mocked GPS. Compass behaviour, iOS `webkitCompassHeading`, Samsung Internet and sensor drift all need to be checked on actual phones.
 - **CelesTrak CORS.** The app fetches `https://celestrak.org/NORAD/elements/gp.php?GROUP=…&FORMAT=json` directly from the browser. In development, a same-origin Vite proxy (`/celestrak`) is used as a fallback. If a production host hits CORS or rate limits, add the small caching backend described in the blueprint's V2 section.

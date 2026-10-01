@@ -1,5 +1,10 @@
 import {
+  Bell,
   Bookmark,
+  History,
+  Map as MapIcon,
+  Settings,
+  Star,
   Camera,
   ChevronLeft,
   Crosshair,
@@ -14,6 +19,11 @@ import {
 
 /** Icons are used only where they aid recognition (tool buttons, close/back, playback). */
 const ICONS: Record<string, IconNode> = {
+  bell: Bell,
+  history: History,
+  map: MapIcon,
+  star: Star,
+  sliders: Settings,
   bookmark: Bookmark,
   camera: Camera,
   'chevron-left': ChevronLeft,

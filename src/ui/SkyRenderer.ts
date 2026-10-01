@@ -3,6 +3,9 @@ import type { PathPoint } from '../astronomy/types.ts';
 import { DEG, compass8 } from '../utils/degrees.ts';
 import { localClock } from '../utils/format.ts';
 import { clamp, cross, dot, type Vec3 } from '../utils/math.ts';
+import type { SkyField } from '../workers/skyTypes.ts';
+import type { StarCatalogData } from '../stars/starCatalog.ts';
+import { starAlpha, starRadius, starTint } from '../stars/visibility.ts';
 
 export interface GhostPath {
   id: string;
@@ -67,6 +70,8 @@ export class SkyRenderer {
   scanning = false;
   ghosts: GhostPath[] = [];
   replay: ReplayDraw | null = null;
+  /** Real stars + constellation figures (V2) for the scanner, when the catalogue is loaded. */
+  realSky: { field: SkyField; cat: StarCatalogData; lines: [number, number][] } | null = null;
   /** Pointing-driven parallax target in px (clamped to ±8). */
   parallaxTarget = { x: 0, y: 0 };
 
@@ -199,7 +204,10 @@ export class SkyRenderer {
     this.parallax.y += (ty - this.parallax.y) * k;
 
     this.drawBackground(ctx);
-    this.drawStars(ctx, now);
+    if (this.mode === 'scanner' && this.realSky) {
+      this.basis();
+      this.drawRealSky(ctx);
+    } else this.drawStars(ctx, now);
     if (this.mode === 'scanner') {
       this.basis();
       if (this.gridVisible) {
@@ -230,6 +238,38 @@ export class SkyRenderer {
     g.addColorStop(1, this.cameraOn ? 'rgba(5,7,11,0.55)' : 'rgba(5,7,11,0)');
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, this.w, this.h);
+  }
+
+  /** Real star positions and thin constellation lines behind the reticle — trajectories cross them. */
+  private drawRealSky(ctx: CanvasRenderingContext2D): void {
+    const rs = this.realSky!;
+    const fig = new Map<number, Vec3>();
+    const f = rs.field;
+    for (let k = 0; k < f.figureIndex.length; k++) fig.set(f.figureIndex[k], [f.figureEnu[k * 3], f.figureEnu[k * 3 + 1], f.figureEnu[k * 3 + 2]]);
+    ctx.strokeStyle = `rgba(116,137,158,${0.24 * this.starIntensity + 0.06})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const [a, b] of rs.lines) {
+      const va = fig.get(a);
+      const vb = fig.get(b);
+      if (!va || !vb) continue;
+      const pa = this.projectVec(va);
+      const pb = this.projectVec(vb);
+      if (!pa.front || !pb.front) continue;
+      ctx.moveTo(pa.x, pa.y);
+      ctx.lineTo(pb.x, pb.y);
+    }
+    ctx.stroke();
+    for (let k = 0; k < f.index.length; k++) {
+      const p = this.projectVec([f.enu[k * 3], f.enu[k * 3 + 1], f.enu[k * 3 + 2]]);
+      if (!p.front || p.x < -4 || p.y < -4 || p.x > this.w + 4 || p.y > this.h + 4) continue;
+      const s = rs.cat.stars[f.index[k]];
+      const t = starTint(s[4]);
+      ctx.fillStyle = `rgba(${t[0]},${t[1]},${t[2]},${starAlpha(s[3], f.limitMag) * (this.cameraOn ? 0.7 : 1) * Math.max(0.3, this.starIntensity)})`;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, starRadius(s[3]), 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   private drawStars(ctx: CanvasRenderingContext2D, now: number): void {

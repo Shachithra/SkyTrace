@@ -1,0 +1,9 @@
+# Minimal Supabase CLI config for SkyTrace (supabase link / db push / functions deploy)
+project_id = "skytrace"
+
+[functions.push-subscribe]
+verify_jwt = true
+
+[functions.send-pass-alerts]
+# called by pg_cron with the x-cron-secret header, not by users
+verify_jwt = false

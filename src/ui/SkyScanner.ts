@@ -31,6 +31,8 @@ export class SkyScanner {
   baseMode: 'live' | 'manual' = 'live';
   confidence: ConfidenceReading = { grade: 'FAIR', accuracyDeg: 8 };
   active = false;
+  /** pause all drawing (another full-screen renderer is in front) */
+  suspended = false;
 
   private filter = new PointingFilter();
   private heading = new AngleTracker();
@@ -124,6 +126,12 @@ export class SkyScanner {
     return this.frozen;
   }
 
+  /** Freeze on a stored direction (history replay). */
+  freezeTo(t: { az: number; el: number }): void {
+    this.frozen = { ...t };
+    this.view = { ...t };
+  }
+
   unfreeze(): void {
     this.frozen = null;
     this.stableAnnounced = false;
@@ -153,6 +161,10 @@ export class SkyScanner {
 
   private frame = (now: number): void => {
     this.raf = requestAnimationFrame(this.frame);
+    if (this.suspended) {
+      this.lastFrame = now;
+      return;
+    }
     const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 1 / 60;
     this.lastFrame = now;
     const r = this.renderer;

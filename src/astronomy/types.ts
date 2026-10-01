@@ -44,8 +44,8 @@ export interface PathPoint {
   el: number;
 }
 
-export type VisibilityLabel = 'LIKELY_VISIBLE' | 'CROSSED_FIELD';
-export type VisibilityReason = 'DARK_SKY_SUNLIT' | 'DAYLIGHT_SKY' | 'TWILIGHT_SKY' | 'EARTH_SHADOW' | 'FAINT_RANGE' | 'LOW_ELEVATION';
+export type VisibilityLabel = 'LIKELY_VISIBLE' | 'POSSIBLY_VISIBLE' | 'CROSSED_FIELD';
+export type VisibilityReason = 'DARK_SKY_SUNLIT' | 'DAYLIGHT_SKY' | 'TWILIGHT_SKY' | 'EARTH_SHADOW' | 'FAINT_RANGE' | 'LOW_ELEVATION' | 'TOO_FAINT';
 
 export interface Crossing {
   satelliteId: string;
@@ -85,6 +85,7 @@ export interface Crossing {
   visibilityReason: VisibilityReason;
   sunElevation: number;
   illuminated: boolean;
+  estMagnitude: number | null;
 
   durationS: number;
   path: PathPoint[];
@@ -147,16 +148,3 @@ export interface SatelliteInfo {
   simulated: boolean;
   groups: string[];
 }
-
-export type WorkerInbound =
-  | { type: 'LOAD_ORBITS'; records: OrbitRecord[] }
-  | { type: 'TRACE_REQUEST'; request: TraceRequest }
-  | { type: 'CANCEL'; requestId: string }
-  | { type: 'SAT_INFO'; catalogId: number; observer: Observer | null; time: number };
-
-export type WorkerOutbound =
-  | { type: 'ORBITS_READY'; count: number; rejected: number }
-  | { type: 'TRACE_PROGRESS'; requestId: string; checked: number; total: number }
-  | { type: 'TRACE_COMPLETE'; result: TraceResult }
-  | { type: 'TRACE_ERROR'; requestId: string; message: string }
-  | { type: 'SAT_INFO_RESULT'; info: SatelliteInfo | null };

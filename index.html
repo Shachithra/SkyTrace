@@ -5,7 +5,7 @@
     <!-- CSP -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>SkyTrace — Find what crossed your sky</title>
-    <meta name="description" content="Point your phone at the sky. SkyTrace reconstructs recent satellite paths through that exact field." />
+    <meta name="description" content="SkyTrace — live satellite observatory and constellation guide. Know what is above you; find what crossed your sky." />
     <meta name="theme-color" content="#05070B" />
     <meta name="color-scheme" content="dark" />
     <meta name="referrer" content="no-referrer" />
@@ -127,14 +127,14 @@
           </li>
         </ul>
         <div class="perm-actions">
-          <button class="btn btn-primary" data-action="open-scanner" disabled>OPEN SCANNER</button>
+          <button class="btn btn-primary" data-action="open-scanner" disabled>OPEN LIVE SKY</button>
           <button class="btn btn-quiet" data-action="open-manual">USE MANUAL SKY SELECTOR</button>
         </div>
         <p class="privacy-line mono">YOUR POSITION STAYS ON THIS DEVICE · NO ACCOUNT · NO MICROPHONE</p>
       </section>
 
       <!-- 04/05/08 · LIVE SKY SCANNER (+ scanning state, + trajectory replay) -->
-      <section id="screen-scanner" class="screen scanner" hidden aria-label="Live sky scanner" data-mode="live">
+      <section id="screen-scanner" class="screen scanner nav-screen" hidden aria-label="Trace scanner" data-mode="live">
         <header class="sc-brand">
           <span class="wordmark small">SKYTRACE</span>
           <span class="sc-mode mono" data-scan-mode>LIVE TRACE</span>
@@ -176,6 +176,7 @@
         <div class="sc-tools">
           <button class="icon-btn" data-action="manual" aria-label="Manual sky selector" aria-pressed="false" data-icon="crosshair"></button>
           <button class="icon-btn" data-action="camera" aria-label="Camera background" aria-pressed="false" data-icon="camera"></button>
+          <button class="icon-btn" data-action="go-history" aria-label="History" data-icon="history"></button>
           <button class="icon-btn" data-action="settings" aria-label="Settings" data-icon="settings"></button>
         </div>
 
@@ -221,6 +222,116 @@
         </div>
       </section>
 
+      <!-- V2 · HOME — one dominant sky view + next visible pass -->
+      <section id="screen-home2" class="screen home2 nav-screen" hidden aria-labelledby="home2-title">
+        <header class="v2-head">
+          <div class="v2-brand">
+            <span class="wordmark small">SKYTRACE</span>
+            <h2 id="home2-title" class="sc-mode mono">LIVE SKY</h2>
+            <span class="sc-data mono" data-home-status></span>
+          </div>
+          <div class="v2-head-tools" data-head-tools></div>
+        </header>
+        <div class="home2-sky">
+          <canvas class="home2-canvas" data-home-canvas aria-label="All-sky map of the sky above you right now" role="img"></canvas>
+          <p class="home2-caption mono" data-home-caption></p>
+        </div>
+        <div class="home2-next" data-home-next aria-live="polite"></div>
+        <div class="home2-actions">
+          <button class="btn btn-primary" data-action="open-live">OPEN LIVE SKY</button>
+        </div>
+      </section>
+
+      <!-- V2 · LIVE SKY MODE -->
+      <section id="screen-live" class="screen live nav-screen" hidden aria-label="Live sky" data-view="pointing">
+        <canvas class="live-canvas" data-live-canvas aria-hidden="true"></canvas>
+        <header class="live-brand">
+          <span class="wordmark small">SKYTRACE</span>
+          <span class="sc-mode mono" data-live-mode>LIVE SKY</span>
+          <span class="sc-data mono" data-live-status></span>
+        </header>
+        <div class="live-top-right">
+          <div class="sc-status" data-live-sensors role="group" aria-label="Sensor status"></div>
+          <div class="v2-head-tools" data-live-tools></div>
+        </div>
+        <div class="compass-arc live-compass" data-live-compass aria-hidden="true"></div>
+        <div class="elev-scale live-elev" data-live-elev aria-hidden="true"></div>
+        <div class="live-cross" aria-hidden="true"><span></span><span></span></div>
+
+        <button class="live-context mono" data-live-context hidden></button>
+        <button class="live-pattern" data-live-pattern hidden></button>
+
+        <dl class="sky-info mono" data-sky-info aria-label="Sky field"></dl>
+        <p class="live-counts mono" data-live-counts aria-live="polite"></p>
+
+        <div class="live-tools">
+          <button class="icon-btn" data-action="live-view" aria-label="Switch to all-sky map" aria-pressed="false" data-icon="map"></button>
+          <button class="icon-btn" data-action="live-camera" aria-label="Camera AR overlay" aria-pressed="false" data-icon="camera"></button>
+          <button class="icon-btn" data-action="live-locate" aria-label="Recentre on where the phone points" data-icon="crosshair"></button>
+        </div>
+
+        <div class="live-strips">
+          <div class="strip filter-strip" data-sat-filter></div>
+          <div class="strip layer-strip" data-layers></div>
+        </div>
+
+        <div class="live-selection" data-live-selection hidden aria-live="polite"></div>
+      </section>
+
+      <!-- V2 · UPCOMING PASSES -->
+      <section id="screen-passes" class="screen v2-page nav-screen" hidden aria-labelledby="passes-title">
+        <header class="v2-head">
+          <div class="v2-brand">
+            <span class="wordmark small">SKYTRACE</span>
+            <h2 id="passes-title" class="page-title mono">UPCOMING PASSES</h2>
+            <span class="sc-data mono" data-passes-where></span>
+          </div>
+          <div class="v2-head-tools" data-head-tools></div>
+        </header>
+        <div class="page-controls">
+          <div class="strip" data-passes-range></div>
+          <div class="strip" data-passes-toggles role="group" aria-label="Pass filters"></div>
+        </div>
+        <p class="data-note mono" data-passes-note aria-live="polite"></p>
+        <div class="timeline-host" data-passes-list></div>
+      </section>
+
+      <!-- V2 · SAVED: my satellites, saved locations, account -->
+      <section id="screen-saved" class="screen v2-page nav-screen" hidden aria-labelledby="saved-title">
+        <header class="v2-head">
+          <div class="v2-brand">
+            <span class="wordmark small">SKYTRACE</span>
+            <h2 id="saved-title" class="page-title mono">MY SATELLITES</h2>
+            <span class="sc-data mono" data-saved-sync></span>
+          </div>
+          <div class="v2-head-tools" data-head-tools></div>
+        </header>
+        <div data-saved-sats></div>
+        <section class="set-group">
+          <div class="set-head"><h3 class="set-name">SAVED LOCATIONS</h3><span class="set-value" data-loc-active></span></div>
+          <div data-saved-locs></div>
+          <form class="coord-form loc-form" data-loc-form novalidate>
+            <label>NAME <input name="name" maxlength="40" placeholder="HOME" required /></label>
+            <button class="btn small" type="submit">SAVE CURRENT POSITION</button>
+          </form>
+          <p class="set-help">Saving a location is optional and always explicit. SkyTrace never tracks you in the background.</p>
+        </section>
+        <section class="set-group" data-account></section>
+      </section>
+
+      <!-- V2 · HISTORY -->
+      <section id="screen-history" class="screen v2-page nav-screen" hidden aria-labelledby="history-title">
+        <header class="v2-head">
+          <div class="v2-brand">
+            <span class="wordmark small">SKYTRACE</span>
+            <h2 id="history-title" class="page-title mono">HISTORY</h2>
+          </div>
+          <div class="v2-head-tools" data-head-tools></div>
+        </header>
+        <div class="page-controls"><div class="strip" data-history-tabs></div></div>
+        <div data-history-list></div>
+      </section>
+
       <!-- 06 + 09 · TRACE RESULTS / NEXT CROSSINGS -->
       <section id="sheet-results" class="sheet results" hidden aria-labelledby="results-title" tabindex="-1">
         <div class="sheet-grip" aria-hidden="true"></div>
@@ -261,6 +372,8 @@
         <p class="data-note mono" data-detail-note></p>
         <div class="detail-actions">
           <button class="btn btn-primary" data-action="replay">REPLAY PATH ACROSS FIELD</button>
+          <button class="btn" data-action="log-observation">LOG OBSERVATION</button>
+          <button class="btn btn-quiet" data-action="detail-alert">ALERT ME</button>
         </div>
       </section>
 
@@ -284,7 +397,48 @@
         </header>
         <div data-sighting-body></div>
       </section>
+
+      <!-- V2 sheets: star / constellation / satellite, pass detail, alerts, account -->
+      <section id="sheet-object" class="sheet object" hidden aria-labelledby="object-title" tabindex="-1">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <header class="results-head">
+          <div>
+            <p class="label" data-object-kicker></p>
+            <h2 id="object-title" class="object-title" data-object-title></h2>
+          </div>
+          <button class="icon-btn" data-action="close-object" aria-label="Close" data-icon="x"></button>
+        </header>
+        <div data-object-body></div>
+      </section>
+
+      <section id="sheet-pass" class="sheet pass" hidden aria-labelledby="pass-title" tabindex="-1">
+        <div class="sheet-grip" aria-hidden="true"></div>
+        <header class="results-head">
+          <div>
+            <p class="label" data-pass-kicker>PASS</p>
+            <h2 id="pass-title" class="object-title" data-pass-title></h2>
+          </div>
+          <button class="icon-btn" data-action="close-pass" aria-label="Close" data-icon="x"></button>
+        </header>
+        <div data-pass-body></div>
+      </section>
+
+      <section id="sheet-alert" class="sheet alert" hidden aria-labelledby="alert-title" tabindex="-1">
+        <header class="results-head">
+          <h2 id="alert-title" class="mono results-title">PASS ALERT</h2>
+          <button class="icon-btn" data-action="close-alert" aria-label="Close" data-icon="x"></button>
+        </header>
+        <div data-alert-body></div>
+      </section>
+      <nav class="nav" data-nav hidden aria-label="Primary">
+        <button data-nav-to="live" class="mono"><span class="nav-glyph g-sky" aria-hidden="true"></span>SKY</button>
+        <button data-nav-to="scanner" class="mono"><span class="nav-glyph g-trace" aria-hidden="true"></span>TRACE</button>
+        <button data-nav-to="passes" class="mono"><span class="nav-glyph g-passes" aria-hidden="true"></span>PASSES</button>
+        <button data-nav-to="saved" class="mono"><span class="nav-glyph g-saved" aria-hidden="true"></span>SAVED</button>
+      </nav>
     </main>
+
+
 
     <!-- banners: offline cache, install, update -->
     <div class="banners" data-banners aria-live="polite"></div>

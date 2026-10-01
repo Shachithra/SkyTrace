@@ -15,6 +15,7 @@
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "@fontsource/space-grotesk": "^5.3.0",
+    "@supabase/supabase-js": "^2.117.2",
     "gsap": "^3.15.0",
     "idb": "^8.0.3",
     "lucide": "^1.49.0",

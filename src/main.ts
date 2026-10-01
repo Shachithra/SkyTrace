@@ -8,10 +8,10 @@ import './styles/typography.css';
 import './styles/layout.css';
 import './styles/animations.css';
 import './styles/scanner.css';
+import './styles/live.css';
 
 import gsap from 'gsap';
 import { generateSimulatedOrbits } from './astronomy/demoData.ts';
-import { TraceClient } from './astronomy/traceClient.ts';
 import type { Crossing, SightingQuery, TraceRequest, TraceResult } from './astronomy/types.ts';
 import { playIntro } from './animations/introSequence.ts';
 import { revealTimeline } from './animations/timelineMotion.ts';
@@ -19,13 +19,26 @@ import { coordinateFlashes, launchRing } from './animations/traceSequence.ts';
 import { TrajectoryReplay } from './animations/trajectoryReplay.ts';
 import { cacheSummary, clearOrbitCache, loadOrbits } from './data/orbitalCache.ts';
 import { satelliteMetadata } from './data/satcat.ts';
-import { appendHistory, prefersReducedMotion, settings } from './data/settings.ts';
+import { prefersReducedMotion, settings } from './data/settings.ts';
 import { initInstall, maybeOfferInstall } from './pwa/install.ts';
 import { onConnectivity, orbitStatusText, type OrbitDataState } from './pwa/offline.ts';
 import { initUpdates, offerIfIdle } from './pwa/update.ts';
-import { CameraBackdrop } from './sensors/camera.ts';
-import { LocationSensor } from './sensors/location.ts';
-import { OrientationSensor } from './sensors/orientation.ts';
+import { camera, location, observer, orbit, orientation, passes, refreshActiveLocation, refreshAlerts, satMeta, setRecords, sky, skyDatasets, skyDataSync } from './app/services.ts';
+import { router, type NavParams, type ScreenId } from './app/router.ts';
+import { savedLocations, savedSatellites } from './sync/favorites.ts';
+import { observations } from './history/observations.ts';
+import { traces } from './history/traces.ts';
+import { userStore } from './data/userStore.ts';
+import { scheduleSync, syncAll } from './sync/historySync.ts';
+import { onSession, currentSession } from './sync/supabase.ts';
+import { LiveSkyScreen } from './screens/liveSky.ts';
+import { HomeScreen } from './screens/home.ts';
+import { PassesScreen } from './screens/passes.ts';
+import { SavedScreen } from './screens/saved.ts';
+import { HistoryScreen, type ReplayRequest } from './screens/history.ts';
+import { closeSheet, openSheet } from './ui/sheets.ts';
+import { applyNightMode, nightModeButton } from './ui/NightModeControl.ts';
+import { renderPassAlertControl } from './ui/PassAlertControl.ts';
 import { $, $$, clear, h, hydrateIcons, s, setIcon, setText } from './ui/dom.ts';
 import { SatelliteDetail } from './ui/SatelliteDetail.ts';
 import { SettingsPanel } from './ui/SettingsPanel.ts';
@@ -50,7 +63,8 @@ interface TraceSession {
 const UPCOMING_MS = 2 * 60 * 60 * 1000;
 
 const app = {
-  screen: 'splash' as 'splash' | 'home' | 'permissions' | 'scanner',
+  screen: 'splash' as ScreenId,
+  replayReturn: null as ScreenId | null,
   orbit: { count: 0, fetchedAt: null, source: 'none' } as OrbitDataState,
   orbitsLoading: null as Promise<void> | null,
   tracing: null as string | null,
@@ -64,10 +78,7 @@ const app = {
   silentWarned: false,
 };
 
-const location = new LocationSensor();
-const orientation = new OrientationSensor();
-const camera = new CameraBackdrop($<HTMLVideoElement>('#camera'));
-const client = new TraceClient();
+const client = orbit;
 const scanner = new SkyScanner($('#screen-scanner'), $<HTMLCanvasElement>('#sky'), orientation, location);
 const detail = new SatelliteDetail($('#screen-detail'));
 const settingsPanel = new SettingsPanel($('[data-settings-body]'), {
@@ -78,7 +89,13 @@ const settingsPanel = new SettingsPanel($('[data-settings-body]'), {
   },
   datasetsChanged: debounce(() => void refreshOrbits(false), 600),
   orbitInfo: () => ({ count: app.orbit.count, oldestFetch: app.orbit.fetchedAt, simulated: app.orbit.source === 'simulated' }),
+  starVersion: () => skyDataSync()?.stars.version ?? null,
 });
+const live = new LiveSkyScreen();
+const home2 = new HomeScreen();
+const passesScreen = new PassesScreen();
+const savedScreen = new SavedScreen();
+const historyScreen = new HistoryScreen();
 const sightingPanel = new SightingPanel($('[data-sighting-body]'), (choice) => {
   closeSheet('#sheet-sighting');
   app.sightingQueued = choice;
@@ -108,31 +125,63 @@ async function boot(): Promise<void> {
   };
   orientation.onChange(onOrientationChange);
   location.onChange(updatePermissionStates);
+  location.onChange(() => passes.invalidate());
+  applyNightMode(settings.get().nightMode);
+  renderHeadTools();
+  router.set((sc, p) => show(sc, p));
+  router.provide('alert', (id: number, name: string) => void openAlertSheet(id, name));
+  router.provide('replayPath', (r: ReplayRequest) => startReplayPath(r));
+  router.provide('orbitFetchedAt', () => app.orbit.fetchedAt);
+  router.provide('retryOrbits', () => refreshOrbits(true));
+  router.provide('useSimulated', () => useSimulated());
+  void refreshActiveLocation();
+  void skyDatasets();
+  // Optional account sync (no-op in guest mode).
+  userStore.setSyncHook(scheduleSync);
+  onSession((sess) => {
+    if (sess) void syncAll();
+  });
+  void currentSession().then((sess) => sess && syncAll());
+  window.addEventListener('online', () => void syncAll());
+  setInterval(() => void refreshAlerts(), 5 * 60_000);
+  setInterval(() => void feedScannerSky(), 30_000);
 
   const utcTimer = setInterval(() => $$('[data-utc]').forEach((el) => setText(el, utcClock())), 1000);
   $$('[data-utc]').forEach((el) => setText(el, utcClock()));
 
   // Orbital data loads in the background from cache first; network only when due.
-  app.orbitsLoading = refreshOrbits(false);
+  app.orbitsLoading = refreshOrbits(false).then(migrateV1Favourites);
 
   await playIntro(reduce());
   clearInterval(utcTimer);
   $('#screen-splash').hidden = true;
 
-  if (!settings.get().onboarded) {
+  // App shortcuts (manifest) and deep links: ?view=sky|trace|passes|sighting|saved|history
+  const view = new URLSearchParams(window.location.search).get('view');
+  if (!settings.get().onboarded && !view) {
     show('home');
     return;
   }
   // Returning / installed users launch almost directly into the instrument.
   const geo = await location.peek();
   if (geo === 'granted') {
-    location.request().catch(() => undefined);
-    if (orientation.needsPermission) show('permissions');
-    else {
-      void orientation.request();
-      openScanner();
+    await location.request().catch(() => undefined);
+    if (!orientation.needsPermission) void orientation.request();
+  }
+  if (!observer()) {
+    show('permissions');
+    return;
+  }
+  settings.set({ onboarded: true });
+  const target: Record<string, ScreenId> = { sky: 'live', trace: 'scanner', passes: 'passes', sighting: 'scanner', saved: 'saved', history: 'history' };
+  if (view && target[view]) {
+    if (target[view] === 'scanner') openScanner();
+    else show(target[view]);
+    if (view === 'sighting') {
+      sightingPanel.render();
+      openSheet('#sheet-sighting');
     }
-  } else show('permissions');
+  } else show('home2');
 }
 
 function applyAppearance(): void {
@@ -146,6 +195,15 @@ function applyAppearance(): void {
 }
 
 function onSettingsChanged(st: ReturnType<typeof settings.get>, changed: string[]): void {
+  if (changed.includes('nightMode')) {
+    applyNightMode(st.nightMode);
+    live.setNight();
+    renderHeadTools();
+  }
+  if (changed.includes('passMinElevation')) {
+    passes.invalidate();
+    void passes.next24h(true);
+  }
   if (changed.some((k) => ['contrast', 'reduceMotion', 'starIntensity'].includes(k))) applyAppearance();
   if (changed.includes('fieldRadius')) scanner.setRadius(st.fieldRadius);
   if (changed.includes('camera')) void setCamera(st.camera);
@@ -153,9 +211,27 @@ function onSettingsChanged(st: ReturnType<typeof settings.get>, changed: string[
 
 /* ───────────────────────── screens ───────────────────────── */
 
-function show(screen: typeof app.screen): void {
-  const ids = { splash: '#screen-splash', home: '#screen-home', permissions: '#screen-permissions', scanner: '#screen-scanner' };
-  for (const [k, sel] of Object.entries(ids)) {
+const SCREENS: Record<string, string> = {
+  splash: '#screen-splash',
+  home: '#screen-home',
+  permissions: '#screen-permissions',
+  scanner: '#screen-scanner',
+  home2: '#screen-home2',
+  live: '#screen-live',
+  passes: '#screen-passes',
+  saved: '#screen-saved',
+  history: '#screen-history',
+};
+const NAV_SCREENS: ScreenId[] = ['home2', 'live', 'scanner', 'passes', 'saved', 'history'];
+
+function show(screen: ScreenId, params?: NavParams): void {
+  if (screen === 'scanner' && app.screen !== 'scanner' && !params) return openScanner();
+  const prev = app.screen;
+  for (const sel of ['#sheet-object', '#sheet-pass', '#sheet-alert']) if (!$(sel).hidden) $(sel).hidden = true;
+  if (prev === 'live' && screen !== 'live') live.close();
+  if (prev === 'home2' && screen !== 'home2') home2.close();
+  if (prev === 'passes' && screen !== 'passes') passesScreen.close();
+  for (const [k, sel] of Object.entries(SCREENS)) {
     const el = $(sel);
     if (k === screen) {
       el.hidden = false;
@@ -164,8 +240,34 @@ function show(screen: typeof app.screen): void {
   }
   app.screen = screen;
   scanner.active = screen === 'scanner';
+  scanner.suspended = screen === 'live';
+  const nav = $('[data-nav]');
+  nav.hidden = !NAV_SCREENS.includes(screen);
+  $$('[data-nav-to]', nav).forEach((b) => (b.dataset.navTo === screen ? b.setAttribute('aria-current', 'page') : b.removeAttribute('aria-current')));
   if (screen === 'permissions') updatePermissionStates();
+  if (screen === 'scanner') void feedScannerSky();
   if (screen === 'home') animateHome();
+  if (screen === 'live') void live.open({ focusSatellite: params?.focusSatellite });
+  if (screen === 'home2') void home2.open();
+  if (screen === 'passes') void passesScreen.open({ constellation: params?.constellation });
+  if (screen === 'saved') void savedScreen.open();
+  if (screen === 'history') void historyScreen.open();
+}
+
+/** Secondary navigation (HISTORY, SETTINGS) + night-vision control in page headers. */
+function renderHeadTools(): void {
+  for (const host of $$('[data-head-tools], [data-live-tools]')) {
+    clear(host);
+    const hist = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'History', 'data-action': 'go-history', 'data-icon': 'history' });
+    const set = h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Settings', 'data-action': 'settings', 'data-icon': 'settings' });
+    host.append(nightModeButton(settings.get().nightMode, (m) => settings.set({ nightMode: m })), hist, set);
+    hydrateIcons(host);
+  }
+}
+
+async function openAlertSheet(id: number, name: string): Promise<void> {
+  await renderPassAlertControl($('[data-alert-body]'), { id, name }, await savedLocations.list(), () => closeSheet('#sheet-alert'));
+  openSheet('#sheet-alert');
 }
 
 function buildHomeReticle(): void {
@@ -310,7 +412,7 @@ async function setCamera(on: boolean): Promise<void> {
 
 function openScanner(manual = false): void {
   if (!settings.get().onboarded) settings.set({ onboarded: true });
-  show('scanner');
+  show('scanner', {});
   const useManual = manual || orientation.status === 'unsupported' || orientation.status === 'silent' || orientation.status === 'denied';
   scanner.setMode(useManual ? 'manual' : 'live');
   $('[data-action="manual"]').setAttribute('aria-pressed', String(useManual));
@@ -386,6 +488,7 @@ async function refreshOrbits(force: boolean): Promise<void> {
     const res = await loadOrbits(st.datasets, st.refreshHours * 3_600_000, { force });
     if (res.records.length) {
       const ready = await client.load(res.records);
+      setRecords(res.records);
       app.orbit = { count: ready.count, fetchedAt: res.oldestFetch, source: res.source };
       if (res.errors.length && res.source === 'cache' && navigator.onLine && force) toast('ORBIT REFRESH FAILED · USING LOCAL ORBIT CACHE', 'warn');
       if (force && res.source !== 'cache') toast(`ORBITS UPDATED · ${ready.count.toLocaleString('en-US')} OBJECTS`, 'ok');
@@ -398,9 +501,33 @@ async function refreshOrbits(force: boolean): Promise<void> {
   updateOrbitStatus();
 }
 
+/** Real stars + constellation figures behind the trace scanner (V2). */
+async function feedScannerSky(): Promise<void> {
+  if (app.screen !== 'scanner') return;
+  const o = observer();
+  const d = await skyDatasets();
+  if (!o || !d) return;
+  try {
+    const field = await sky.field(o, Date.now(), 4.5);
+    scanner.renderer.realSky = { field, cat: d.stars, lines: d.constellations.constellations.flatMap((c) => c.lines) };
+  } catch {
+    /* sky worker not ready */
+  }
+}
+
+/** V1 kept saved satellite IDs in settings; move them into the V2 local-first store once. */
+async function migrateV1Favourites(): Promise<void> {
+  const ids = settings.get().savedSatellites;
+  if (!ids.length) return;
+  for (const id of ids) if (!(await savedSatellites.find(id))) await savedSatellites.toggle(id, satMetaName(id));
+  settings.set({ savedSatellites: [] });
+}
+const satMetaName = (id: number): string => satMeta.get(id)?.name ?? `NORAD ${id}`;
+
 async function useSimulated(): Promise<void> {
   const recs = generateSimulatedOrbits(Date.now());
   const ready = await client.load(recs);
+  setRecords(recs);
   app.orbit = { count: ready.count, fetchedAt: Date.now(), source: 'simulated' };
   updateOrbitStatus();
   toast('SIMULATED ORBITS LOADED · NOT REAL OBJECTS', 'warn', 4200);
@@ -413,6 +540,7 @@ async function useAllCached(): Promise<void> {
   const res = await loadOrbits(groups, Number.MAX_SAFE_INTEGER, { online: false });
   if (res.records.length) {
     const ready = await client.load(res.records);
+    setRecords(res.records);
     app.orbit = { count: ready.count, fetchedAt: res.oldestFetch, source: 'cache' };
     updateOrbitStatus();
   }
@@ -429,7 +557,8 @@ function updateOrbitStatus(): void {
 
 async function trace(opts: { reuseTarget?: boolean } = {}): Promise<void> {
   if (app.tracing) return;
-  if (!location.observer) {
+  const obs = observer();
+  if (!obs) {
     toast('LOCATION NEEDED TO CALCULATE YOUR SKY', 'warn');
     show('permissions');
     return;
@@ -465,7 +594,7 @@ async function trace(opts: { reuseTarget?: boolean } = {}): Promise<void> {
   const requestId = `${now.toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
   const request: TraceRequest = {
     requestId,
-    observer: location.observer,
+    observer: obs,
     target: { azimuth: target.az, elevation: target.el, radius: st.fieldRadius },
     startTime,
     endTime,
@@ -501,15 +630,23 @@ async function trace(opts: { reuseTarget?: boolean } = {}): Promise<void> {
     app.list = 'past';
     app.sort = 'recent';
     haptic('success');
-    void appendHistory({
-      traceId,
-      time: now,
-      azimuth: target.az,
-      elevation: target.el,
-      radius: st.fieldRadius,
-      windowMin: st.windowMin,
-      matches: result.past.map((c) => ({ name: c.name, catalogId: c.catalogId, closestTime: c.closestTime })),
-    });
+    // Trace history (V2): ID, direction, time, matches, sensor accuracy; position only if opted in.
+    if (st.keepHistory) {
+      void traces.add({
+        trace_id: traceId,
+        trace_time: new Date(now).toISOString(),
+        latitude: st.storeLocationHistory ? obs.latitude : null,
+        longitude: st.storeLocationHistory ? obs.longitude : null,
+        target_azimuth: target.az,
+        target_elevation: target.el,
+        field_radius: st.fieldRadius,
+        time_window: sighting ? Math.round((endTime - startTime) / 60000) : st.windowMin,
+        match_count: result.past.length,
+        selected_norad_id: null,
+        sensor_accuracy: scanner.mode === 'manual' ? null : scanner.confidence.accuracyDeg,
+        matches: result.past.slice(0, 25).map((c) => ({ norad_id: c.catalogId, name: c.name, closest: c.closestTime, min_distance: c.minAngularDistance, path: c.path.filter((_, i) => i % 2 === 0) })),
+      });
+    }
     openResults();
     setTimeout(maybeOfferInstall, 2600);
   } catch (err) {
@@ -541,38 +678,6 @@ function unlock(): void {
 }
 
 /* ───────────────────────── results ───────────────────────── */
-
-function openSheet(sel: string): void {
-  const el = $(sel);
-  const wasHidden = el.hidden;
-  el.hidden = false;
-  if (wasHidden) {
-    const wide = window.innerWidth >= 760;
-    gsap.fromTo(
-      el,
-      wide ? { xPercent: reduce() ? 0 : 100, opacity: reduce() ? 0 : 1 } : { yPercent: reduce() ? 0 : 100, opacity: reduce() ? 0 : 1 },
-      { xPercent: 0, yPercent: 0, opacity: 1, duration: reduce() ? 0.2 : 0.55, ease: 'power3.out' },
-    );
-  }
-  el.focus({ preventScroll: true });
-}
-
-function closeSheet(sel: string, then?: () => void): void {
-  const el = $(sel);
-  if (el.hidden) return then?.();
-  const wide = window.innerWidth >= 760;
-  gsap.to(el, {
-    ...(wide ? { xPercent: reduce() ? 0 : 100 } : { yPercent: reduce() ? 0 : 100 }),
-    opacity: reduce() ? 0 : 1,
-    duration: reduce() ? 0.15 : 0.35,
-    ease: 'power2.in',
-    onComplete: () => {
-      el.hidden = true;
-      gsap.set(el, { clearProps: 'transform,opacity' });
-      then?.();
-    },
-  });
-}
 
 function openResults(): void {
   scanner.setSheetOpen(true);
@@ -647,6 +752,8 @@ function renderResults(animate: boolean): void {
       radius: request.target.radius,
       sort: app.sort,
       sighting,
+      sightingTime: ses.sighting?.time,
+      sightingDirection: ses.sighting?.direction ?? null,
       onSelect: (c, origin) => openDetail(c, origin),
     });
     if (animate) requestAnimationFrame(() => revealTimeline(tl, reduce()));
@@ -768,7 +875,8 @@ async function openDetail(c: Crossing, origin: HTMLElement): Promise<void> {
   };
   detail.render(base, reduce());
   const saveBtn = $('[data-action="save-sat"]');
-  saveBtn.setAttribute('aria-pressed', String(settings.get().savedSatellites.includes(c.catalogId)));
+  saveBtn.setAttribute('aria-pressed', String(!!(await savedSatellites.find(c.catalogId))));
+  if (settings.get().keepHistory) void traces.select(ses.traceId, c.catalogId);
 
   // Transition: the selected timeline point expands into the detail view.
   const el = $('#screen-detail');
@@ -782,7 +890,7 @@ async function openDetail(c: Crossing, origin: HTMLElement): Promise<void> {
   el.focus({ preventScroll: true });
   el.scrollTop = 0;
 
-  const [info, meta] = await Promise.all([client.info(c.catalogId, location.observer), c.simulated ? Promise.resolve(null) : satelliteMetadata(c.catalogId)]);
+  const [info, meta] = await Promise.all([client.info(c.catalogId, observer()), c.simulated ? Promise.resolve(null) : satelliteMetadata(c.catalogId)]);
   if (app.selected !== c) return;
   detail.render({ ...base, info, meta, now: Date.now() }, reduce());
 }
@@ -843,9 +951,47 @@ function closeReplay(): void {
   app.replay = null;
   scanner.setReplay(null);
   $('[data-replay]').hidden = true;
-  scanner.setMode('locked');
   app.selected = null;
+  if (app.replayReturn) {
+    const back = app.replayReturn;
+    app.replayReturn = null;
+    scanner.unfreeze();
+    scanner.setMode(scanner.baseMode);
+    show(back);
+    return;
+  }
+  scanner.setMode('locked');
   openResults();
+}
+
+/** Replay a stored path (observation / trace history) across its field, offline. */
+function startReplayPath(r: ReplayRequest): void {
+  if (r.path.length < 2) return;
+  closeSheet('#sheet-object');
+  app.replayReturn = app.screen;
+  show('scanner', {});
+  scanner.setRadius(r.radius);
+  scanner.freezeTo(r.target);
+  scanner.setMode('replay');
+  scanner.setGhosts([]);
+  const bar = $('[data-replay]');
+  bar.hidden = false;
+  setText($('[data-replay-name]', bar), r.name);
+  const scrub = $<HTMLInputElement>('[data-replay-scrub]', bar);
+  const toggleBtn = $('[data-action="replay-toggle"]', bar);
+  app.replay?.destroy();
+  app.replay = new TrajectoryReplay(
+    r.path,
+    (f) => {
+      scanner.setReplay({ path: r.path, drawIn: f.drawIn, time: f.time });
+      setText($('[data-replay-start]', bar), utcLocal(r.path[0].t));
+      setText($('[data-replay-end]', bar), utcLocal(r.path[r.path.length - 1].t));
+      setText($('[data-replay-now]', bar), utcLocal(f.time));
+      scrub.value = String(Math.round(f.progress * 1000));
+      setIcon(toggleBtn, f.playing ? 'pause' : 'play');
+    },
+    reduce(),
+  );
 }
 
 /* ───────────────────────── actions ───────────────────────── */
@@ -871,13 +1017,15 @@ function wireActions(): void {
         void setCamera(true);
         break;
       case 'open-scanner':
-        openScanner(false);
+        settings.set({ onboarded: true });
+        show('live');
         break;
       case 'open-manual':
-        if (!location.observer) {
+        if (!observer()) {
           toast('SET YOUR LOCATION FIRST', 'warn');
           return;
         }
+        settings.set({ onboarded: true });
         openScanner(true);
         break;
       case 'trace':
@@ -921,14 +1069,63 @@ function wireActions(): void {
       case 'save-sat': {
         const c = app.selected;
         if (!c) break;
-        const cur = new Set(settings.get().savedSatellites);
-        if (cur.has(c.catalogId)) cur.delete(c.catalogId);
-        else cur.add(c.catalogId);
-        settings.set({ savedSatellites: [...cur] });
-        el.setAttribute('aria-pressed', String(cur.has(c.catalogId)));
-        toast(cur.has(c.catalogId) ? 'SATELLITE SAVED' : 'SATELLITE REMOVED', 'ok', 1800);
+        void savedSatellites.toggle(c.catalogId, c.name).then((on) => {
+          el.setAttribute('aria-pressed', String(on));
+          toast(on ? 'SATELLITE SAVED' : 'SATELLITE REMOVED', 'ok', 1800);
+        });
         break;
       }
+      case 'log-observation': {
+        const c = app.selected;
+        const ses = app.session;
+        if (!c || !ses) break;
+        const st = settings.get();
+        const o = ses.request.observer;
+        const conf = c.matchTier === 'BEST MATCH' || c.minAngularDistance < ses.request.target.radius * 0.35 ? 'HIGH' : c.minAngularDistance < ses.request.target.radius * 0.7 ? 'MEDIUM' : 'LOW';
+        void observations
+          .add({
+            norad_id: c.catalogId,
+            satellite_name: c.name,
+            observed_at: new Date(c.closestTime).toISOString(),
+            latitude: st.storeLocationHistory ? o.latitude : null,
+            longitude: st.storeLocationHistory ? o.longitude : null,
+            azimuth: ses.request.target.azimuth,
+            elevation: ses.request.target.elevation,
+            match_confidence: conf,
+            path: c.path,
+            trace_id: ses.traceId,
+            field_radius: ses.request.target.radius,
+          })
+          .then(() => toast(`OBSERVATION LOGGED · ${c.name}`, 'ok'));
+        break;
+      }
+      case 'detail-alert':
+        if (app.selected) void openAlertSheet(app.selected.catalogId, app.selected.name);
+        break;
+      case 'open-live':
+        show('live');
+        break;
+      case 'go-history':
+        show('history');
+        break;
+      case 'live-view':
+        live.toggleView();
+        break;
+      case 'live-camera':
+        void live.toggleCamera();
+        break;
+      case 'live-locate':
+        live.recentre();
+        break;
+      case 'close-object':
+        closeSheet('#sheet-object');
+        break;
+      case 'close-pass':
+        closeSheet('#sheet-pass');
+        break;
+      case 'close-alert':
+        closeSheet('#sheet-alert');
+        break;
       case 'replay':
         startReplay();
         break;
@@ -946,6 +1143,14 @@ function wireActions(): void {
         $('[data-calibration]').hidden = true;
         break;
     }
+  });
+
+  $('[data-nav]').addEventListener('click', (ev) => {
+    const b = (ev.target as Element).closest<HTMLElement>('[data-nav-to]');
+    if (!b) return;
+    const to = b.dataset.navTo as ScreenId;
+    if (to === 'scanner') openScanner();
+    else show(to);
   });
 
   $('[data-replay-scrub]').addEventListener('input', (ev) => app.replay?.scrub(Number((ev.target as HTMLInputElement).value) / 1000));
@@ -973,7 +1178,10 @@ function wireActions(): void {
 
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if (!$('#sheet-settings').hidden) closeSheet('#sheet-settings');
+    if (!$('#sheet-alert').hidden) closeSheet('#sheet-alert');
+    else if (!$('#sheet-object').hidden) closeSheet('#sheet-object');
+    else if (!$('#sheet-pass').hidden) closeSheet('#sheet-pass');
+    else if (!$('#sheet-settings').hidden) closeSheet('#sheet-settings');
     else if (!$('#sheet-sighting').hidden) closeSheet('#sheet-sighting');
     else if (!$('#screen-detail').hidden) closeDetail();
     else if (scanner.mode === 'replay') closeReplay();

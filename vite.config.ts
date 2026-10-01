@@ -14,7 +14,7 @@ const CSP = [
   "img-src 'self' data: blob:",
   "font-src 'self'",
   "media-src 'self' blob: mediastream:",
-  "connect-src 'self' https://celestrak.org",
+  "connect-src 'self' https://celestrak.org https://*.supabase.co wss://*.supabase.co",
   "worker-src 'self' blob:",
   "manifest-src 'self'",
   "object-src 'none'",
@@ -55,10 +55,13 @@ export default defineConfig({
       injectRegister: false,
       manifest,
       manifestFilename: 'manifest.webmanifest',
-      includeAssets: ['icons/*.png', 'icons/icon.svg', 'favicon/*'],
+      includeAssets: ['icons/*.png', 'icons/icon.svg', 'favicon/*', 'data/*.json', 'sw-push.js'],
       workbox: {
         // CACHE FIRST: app shell, JS, CSS, fonts, icons (precached + revisioned).
-        globPatterns: ['**/*.{js,css,html,woff2,woff,png,svg,webmanifest}'],
+        globPatterns: ['**/*.{js,css,html,woff2,woff,png,svg,webmanifest,json}'],
+        // star catalogue + constellations are precached for offline sky mode
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
+        importScripts: ['sw-push.js'],
         navigateFallback: '/index.html',
         cleanupOutdatedCaches: true,
         // Orbital elements are deliberately NOT cached by the service worker: the app's own

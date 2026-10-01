@@ -1,6 +1,10 @@
 import { DATASETS, MIN_REFRESH_MS } from '../data/datasets.ts';
-import { settings, type FieldRadius, type Settings, type WindowMinutes, readHistory, clearHistory } from '../data/settings.ts';
+import { settings, type FieldRadius, type Settings, type WindowMinutes } from '../data/settings.ts';
+import { traces } from '../history/traces.ts';
+import type { MagnitudeFilter } from '../stars/visibility.ts';
+import type { NightMode } from './palette.ts';
 import { cacheSummary, nextAllowedRefresh } from '../data/orbitalCache.ts';
+import { remoteDatasetVersions } from '../sync/historySync.ts';
 import { ago, fmtInt, relativeMinutes } from '../utils/format.ts';
 import { clear, h } from './dom.ts';
 import { group, tickScale, toggleRow } from './controls.ts';
@@ -10,6 +14,7 @@ export interface SettingsActions {
   clearCache: () => Promise<void>;
   datasetsChanged: () => void;
   orbitInfo: () => { count: number; oldestFetch: number | null; simulated: boolean };
+  starVersion: () => string | null;
 }
 
 export class SettingsPanel {
@@ -46,6 +51,42 @@ export class SettingsPanel {
           { value: 12, label: '12°', sub: 'WIDE' },
         ], st.fieldRadius, (v) => set({ fieldRadius: v })),
         h('p', { class: 'set-help' }, 'Radius of the patch of sky searched around the reticle centre.'),
+      ),
+      group(
+        'NIGHT VISION',
+        null,
+        tickScale<NightMode>('Night vision mode', [
+          { value: 'off', label: 'OFF' },
+          { value: 'dim', label: 'DIM', sub: 'ASTRONOMY' },
+          { value: 'red', label: 'RED', sub: 'LIGHT' },
+        ], st.nightMode, (v) => set({ nightMode: v })),
+        h('p', { class: 'set-help' }, 'Red-light mode protects dark-adapted eyes: red text, deep-red lines, reduced brightness, no white flashes.'),
+      ),
+      group(
+        'STAR MAGNITUDE',
+        null,
+        tickScale<MagnitudeFilter>('Star magnitude filter', [
+          { value: 'BRIGHT', label: 'BRIGHT', sub: 'MAG ≤ 2' },
+          { value: 'STANDARD', label: 'STANDARD', sub: 'MAG ≤ 4' },
+          { value: 'DEEP', label: 'DEEP', sub: 'MAG ≤ 6' },
+        ], st.magnitudeFilter, (v) => set({ magnitudeFilter: v })),
+        h('p', { class: 'set-help' }, 'Twilight and daylight automatically hide stars the sky is too bright to show.'),
+      ),
+      group(
+        'AR CAMERA FIELD OF VIEW',
+        `${st.arFov}°`,
+        this.arRange(st.arFov),
+        h('p', { class: 'set-help' }, 'Calibrate until bright stars on screen sit on the real ones in the camera view.'),
+      ),
+      group(
+        'PASS PREDICTIONS',
+        null,
+        tickScale<number>('Minimum pass elevation', [
+          { value: 0, label: '0°' },
+          { value: 10, label: '10°' },
+          { value: 20, label: '20°' },
+          { value: 30, label: '30°' },
+        ], st.passMinElevation, (v) => set({ passMinElevation: v })),
       ),
       group(
         'DISPLAY UNITS',
@@ -123,6 +164,11 @@ export class SettingsPanel {
     for (const g of sum.groups) table.append(h('div', {}, h('span', {}, g.group.toUpperCase()), h('span', {}, `${fmtInt(g.count)} · ${ago(g.fetchedAt)}`)));
     if (!sum.groups.length) table.append(h('div', {}, h('span', {}, 'NO ORBITAL DATA CACHED')));
     if (sum.usageBytes != null) table.append(h('div', {}, h('span', {}, 'STORAGE USED'), h('span', {}, `${(sum.usageBytes / 1048576).toFixed(1)} MB`)));
+    const sv = this.actions.starVersion();
+    table.append(h('div', {}, h('span', {}, 'STAR CATALOGUE'), h('span', {}, sv ?? 'NOT LOADED')));
+    for (const v of await remoteDatasetVersions()) {
+      table.append(h('div', {}, h('span', {}, `SERVER ${v.dataset_name.toUpperCase()}`), h('span', {}, `${v.version}${v.version === sv ? ' · CURRENT' : ''}`)));
+    }
     if (info.simulated) table.append(h('div', {}, h('span', {}, 'IN USE'), h('span', {}, 'SIMULATED ORBITS')));
     else table.append(h('div', {}, h('span', {}, 'IN USE'), h('span', {}, `${fmtInt(info.count)} OBJECTS`)));
 
@@ -158,18 +204,29 @@ export class SettingsPanel {
     );
   }
 
+  private arRange(v: number): HTMLElement {
+    const r = h('input', { class: 'range', type: 'range', min: 20, max: 80, value: v, 'aria-label': 'AR field of view in degrees' }) as HTMLInputElement;
+    r.addEventListener('input', () => {
+      settings.set({ arFov: Number(r.value) });
+      const val = r.closest('.set-group')?.querySelector('.set-value');
+      if (val) val.textContent = `${r.value}°`;
+    });
+    return r;
+  }
+
   private async privacyGroup(st: Settings): Promise<HTMLElement> {
-    const hist = await readHistory();
-    const clearBtn = h('button', { class: 'btn small btn-quiet', type: 'button' }, `CLEAR HISTORY (${hist.length})`);
+    const hist = await traces.list();
+    const clearBtn = h('button', { class: 'btn small btn-quiet', type: 'button' }, `CLEAR TRACE HISTORY (${hist.length})`);
     clearBtn.addEventListener('click', async () => {
-      await clearHistory();
+      for (const t of hist) await traces.remove(t.id);
       void this.render();
     });
     return group(
       'PRIVACY',
       null,
-      h('p', { class: 'set-help' }, 'Your position is used only on this device for calculations. It is never uploaded or stored. Requests to the orbital-data source contain no location.'),
-      toggleRow('Keep trace history', st.keepHistory, (v) => settings.set({ keepHistory: v }), 'Saves pointing direction and matches only — never your position.'),
+      h('p', { class: 'set-help' }, 'Your position is used on this device for calculations. It is never stored unless you choose to. Camera frames are never recorded or uploaded. Requests to the orbital-data source contain no location.'),
+      toggleRow('Keep trace history', st.keepHistory, (v) => settings.set({ keepHistory: v }), 'Trace ID, direction, time, matches and sensor accuracy.'),
+      toggleRow('Store location with history', st.storeLocationHistory, (v) => settings.set({ storeLocationHistory: v }), 'Off by default. When on, traces and observations also keep latitude/longitude.'),
       hist.length ? clearBtn : null,
     );
   }

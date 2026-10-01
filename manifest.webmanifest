@@ -1,7 +1,7 @@
 {
-  "name": "SkyTrace",
+  "name": "SkyTrace \u2014 Live Satellite Observatory",
   "short_name": "SkyTrace",
-  "description": "Point your phone at the sky and find which satellites recently crossed that exact field.",
+  "description": "Know what is above you. Live satellites, upcoming passes, real stars and constellations \u2014 and find what crossed your sky.",
   "id": "/",
   "start_url": "/?source=pwa",
   "scope": "/",
@@ -9,17 +9,108 @@
   "orientation": "portrait",
   "background_color": "#05070B",
   "theme_color": "#05070B",
-  "categories": ["education", "utilities", "science"],
+  "categories": [
+    "education",
+    "utilities",
+    "science"
+  ],
   "icons": [
-    { "src": "icons/icon-48.png", "sizes": "48x48", "type": "image/png" },
-    { "src": "icons/icon-96.png", "sizes": "96x96", "type": "image/png" },
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    {
+      "src": "icons/icon-48.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-96.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
   ],
   "screenshots": [
-    { "src": "textures/screenshot-scanner.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Live sky scanner" },
-    { "src": "textures/screenshot-results.png", "sizes": "780x1688", "type": "image/png", "form_factor": "narrow", "label": "Trace results timeline" }
+    {
+      "src": "textures/screenshot-scanner.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Live sky scanner"
+    },
+    {
+      "src": "textures/screenshot-results.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Trace results timeline"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Live Sky",
+      "short_name": "LIVE SKY",
+      "url": "/?view=sky",
+      "icons": [
+        {
+          "src": "icons/shortcut-sky.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Trace Sky",
+      "short_name": "TRACE SKY",
+      "url": "/?view=trace",
+      "icons": [
+        {
+          "src": "icons/shortcut-trace.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Upcoming Passes",
+      "short_name": "PASSES",
+      "url": "/?view=passes",
+      "icons": [
+        {
+          "src": "icons/shortcut-passes.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "What did I see?",
+      "short_name": "WHAT DID I SEE?",
+      "url": "/?view=sighting",
+      "icons": [
+        {
+          "src": "icons/shortcut-sighting.png",
+          "sizes": "96x96",
+          "type": "image/png"
+        }
+      ]
+    }
   ]
 }

@@ -1,0 +1,274 @@
+/* ───────────────────────── SkyTrace V2: live sky, passes, saved, history ───────────────────────── */
+:root {
+  --nav-h: 58px;
+  --star-soft: #e8edf2;
+  --constellation-ice: #74899e;
+  --visible-green: #77e6a7;
+}
+
+/* ───── night vision ───── */
+:root[data-night='dim'] {
+  --text-starlight: #b9c2cc;
+  --text-muted: #6f7885;
+  --text-faint: #4a525d;
+}
+:root[data-night='red'] {
+  --surface-deep: #020202;
+  --surface-observatory: #050202;
+  --surface-instrument: #0a0303;
+  --text-starlight: #e24b4b;
+  --text-muted: #9a3838;
+  --text-faint: #7f2a2a;
+  --signal-cyan: #e24b4b;
+  --signal-amber: #c44848;
+  --signal-green: #e24b4b;
+  --signal-warn: #c44848;
+  --signal-error: #ff5a5a;
+  --line-subtle: rgba(127, 42, 42, 0.35);
+  --line: rgba(127, 42, 42, 0.55);
+  --line-strong: rgba(160, 50, 50, 0.75);
+  --visible-green: #e24b4b;
+}
+/* slow, flash-free transitions between modes */
+body, .btn, .strip-btn, .nav button, .sheet, .icon-btn {
+  transition: color 1.2s ease, background-color 1.2s ease, border-color 1.2s ease;
+}
+:root[data-night='red'] .env-sky, :root[data-night='red'] .env-camera {
+  filter: grayscale(1) sepia(1) saturate(4) hue-rotate(-45deg) brightness(0.55);
+}
+:root[data-night='dim'] .env-sky { filter: brightness(0.6); }
+:root[data-night='red'] .env-grain { opacity: 0.03; }
+:root[data-night='red'] .tr-orbiter, :root[data-night='red'] .sc-mode::before { animation: none; }
+:root[data-night='red'] .home2-canvas, :root[data-night='red'] .live-canvas { filter: none; }
+
+body.live-active .env-sky { visibility: hidden; }
+
+/* ───── bottom navigation ───── */
+.nav {
+  position: fixed;
+  z-index: 25;
+  left: 0; right: 0; bottom: 0;
+  height: calc(var(--nav-h) + var(--safe-bottom));
+  padding: 0 calc(var(--safe-right) + 6px) var(--safe-bottom) calc(var(--safe-left) + 6px);
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: rgba(5, 7, 11, 0.92);
+  border-top: 1px solid var(--line);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+:root[data-night='red'] .nav { background: rgba(2, 2, 2, 0.95); }
+.nav button {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 5px;
+  min-height: var(--touch);
+  font-size: 10px;
+  letter-spacing: var(--track-label);
+  color: var(--text-faint);
+}
+.nav button[aria-current='page'] { color: var(--text-starlight); }
+.nav button[aria-current='page']::before {
+  content: ''; position: absolute; top: -1px; left: 30%; right: 30%; height: 1px; background: var(--signal-cyan);
+}
+.nav-glyph { width: 18px; height: 12px; position: relative; display: block; }
+.nav-glyph.g-sky { border: 1px solid currentColor; border-bottom: 0; border-radius: 9px 9px 0 0; }
+.nav-glyph.g-sky::after { content: ''; position: absolute; left: 7px; top: 3px; width: 3px; height: 3px; border-radius: 50%; background: currentColor; }
+.nav-glyph.g-trace { border: 1px solid currentColor; border-radius: 50%; width: 12px; height: 12px; }
+.nav-glyph.g-trace::after { content: ''; position: absolute; left: -5px; top: 8px; width: 20px; height: 1px; background: currentColor; transform: rotate(-28deg); }
+.nav-glyph.g-passes { border-bottom: 1px solid currentColor; }
+.nav-glyph.g-passes::after { content: ''; position: absolute; left: 2px; right: 2px; top: 2px; height: 14px; border: 1px solid currentColor; border-bottom: 0; border-radius: 50% 50% 0 0 / 100% 100% 0 0; }
+.nav-glyph.g-saved::before { content: '★'; position: absolute; inset: -4px 0 0; text-align: center; font-size: 13px; line-height: 1; }
+
+.nav-screen { padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + var(--space-4)); }
+/* lift the V1 trace scanner controls above the nav */
+.scanner.nav-screen .sc-telemetry { bottom: calc(var(--safe-bottom) + var(--nav-h) + var(--space-4)); }
+.scanner.nav-screen .sc-center { bottom: calc(var(--safe-bottom) + var(--nav-h) + var(--space-2)); }
+.scanner.nav-screen .sc-tools { bottom: calc(var(--safe-bottom) + var(--nav-h) + var(--space-2)); }
+.scanner.nav-screen .replay-bar { bottom: calc(var(--safe-bottom) + var(--nav-h) + var(--space-2)); }
+.scanner.nav-screen[data-mode='replay'] .sc-telemetry { bottom: calc(var(--safe-bottom) + var(--nav-h) + 150px); }
+.banners { bottom: calc(var(--safe-bottom) + var(--nav-h) + 128px); }
+
+/* ───── shared V2 page chrome ───── */
+.v2-head { display: flex; justify-content: space-between; align-items: flex-start; gap: var(--space-3); }
+.v2-brand { display: grid; gap: 3px; }
+.v2-head-tools { display: flex; align-items: center; gap: 0; }
+.page-title { font-size: 12px; letter-spacing: var(--track-label); font-weight: 500; color: var(--text-starlight); }
+.v2-page { overflow-y: auto; display: grid; align-content: start; gap: var(--space-4); }
+.page-controls { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+
+.night-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: var(--touch); padding: 0 8px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: var(--track-label); color: var(--text-muted);
+}
+.night-dot { width: 8px; height: 8px; border-radius: 50%; border: 1px solid currentColor; }
+.night-btn[data-mode='dim'] .night-dot { background: linear-gradient(90deg, currentColor 50%, transparent 50%); }
+.night-btn[data-mode='red'] { color: #e24b4b; }
+.night-btn[data-mode='red'] .night-dot { background: #e24b4b; border-color: #e24b4b; }
+
+/* strips: compact instrument toggles (not cards) */
+.strip { display: flex; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); max-width: 100%; }
+.strip::-webkit-scrollbar { display: none; }
+.strip-btn {
+  position: relative; flex: none; min-height: 38px; padding: 0 10px;
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.12em; color: var(--text-faint);
+}
+.strip-btn[aria-pressed='true'], .strip-btn[aria-checked='true'] { color: var(--text-starlight); }
+.strip-btn[aria-pressed='true']::after, .strip-btn[aria-checked='true']::after {
+  content: ''; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 1px; background: var(--signal-cyan);
+}
+.strip-btn[aria-pressed='false']::before { content: ''; }
+
+/* visibility indicator: glyph + text, never colour alone */
+.vis { display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 9.5px; letter-spacing: var(--track-label); color: var(--text-faint); }
+.vis[data-status='LIKELY_VISIBLE'] { color: var(--visible-green); }
+.vis[data-status='POSSIBLY_VISIBLE'] { color: var(--signal-amber); }
+.vis-glyph { font-size: 10px; }
+.tl-flag[data-tone='possible'] { color: var(--text-muted); }
+
+/* ───── V2 home ───── */
+.home2 { display: grid; grid-template-rows: auto 1fr auto auto; gap: var(--space-3); overflow: hidden; }
+.home2-sky { position: relative; min-height: 0; display: grid; place-items: center; }
+.home2-canvas { width: min(100%, 62vh, 560px); aspect-ratio: 1; cursor: pointer; }
+.home2-caption { font-size: 9.5px; letter-spacing: 0.12em; color: var(--text-faint); text-align: center; margin-top: var(--space-2); }
+.home2-next { display: grid; gap: var(--space-2); border-top: 1px solid var(--line-subtle); padding-top: var(--space-3); }
+.next-pass { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--space-3); text-align: left; padding: var(--space-1) 0; color: inherit; }
+.np-name { font-size: 20px; font-weight: 500; letter-spacing: 0.03em; }
+.np-time { font-size: 20px; text-align: right; color: var(--signal-cyan); }
+.np-time small { display: block; font-size: 9.5px; color: var(--text-faint); letter-spacing: 0.1em; }
+.np-meta { font-size: 11px; color: var(--text-muted); grid-column: 1; }
+.next-pass .vis { grid-column: 2; grid-row: 2; justify-self: end; }
+.home2-actions { display: flex; }
+.home2-actions .btn { flex: 1; }
+
+/* ───── live sky ───── */
+.live { padding: 0; }
+.live-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.live-canvas:active { cursor: grabbing; }
+.live-brand { position: absolute; top: calc(var(--safe-top) + var(--space-4)); left: calc(var(--safe-left) + var(--space-4)); display: grid; gap: 3px; pointer-events: none; max-width: 58%; }
+.live-top-right { position: absolute; top: calc(var(--safe-top) + var(--space-3)); right: calc(var(--safe-right) + var(--space-2)); display: grid; justify-items: end; gap: var(--space-1); }
+.live-top-right .sc-status { position: static; padding-right: 8px; }
+.live-compass { top: calc(var(--safe-top) + 116px); }
+.live + .compass-needle, .live .compass-needle { top: calc(var(--safe-top) + 112px); }
+.live-elev { top: calc(46% - 20vh); height: 40vh; }
+.live-cross { position: absolute; left: 50%; top: 46%; width: 0; height: 0; pointer-events: none; }
+.live-cross span { position: absolute; background: var(--text-starlight); opacity: 0.7; }
+.live-cross span:first-child { width: 18px; height: 1px; left: -9px; top: 0; }
+.live-cross span:last-child { width: 1px; height: 18px; left: 0; top: -9px; }
+.live[data-view='allsky'] .live-compass, .live[data-view='allsky'] .live-elev, .live[data-view='allsky'] .live-cross, .live[data-view='allsky'] .compass-needle { display: none; }
+
+.live-context {
+  position: absolute; left: 50%; top: calc(46% + 40px); transform: translateX(-50%);
+  display: grid; justify-items: center; gap: 2px; padding: var(--space-2) var(--space-3);
+  font-size: 11px; letter-spacing: var(--track-label); color: var(--signal-cyan); text-align: center;
+  background: rgba(5, 7, 11, 0.55); border-radius: var(--radius-hair); max-width: calc(100% - 32px);
+}
+.live-context .ctx-sub { font-size: 10px; color: var(--visible-green); }
+.live[data-view='allsky'] .live-context { top: auto; bottom: calc(var(--safe-bottom) + var(--nav-h) + 168px); }
+.live-pattern {
+  position: absolute; left: calc(var(--safe-left) + var(--space-4)); top: calc(var(--safe-top) + 160px);
+  display: grid; justify-items: start; gap: 1px; padding: var(--space-2) var(--space-3) var(--space-2) 0;
+  border-left: 1px solid var(--constellation-ice); padding-left: var(--space-3); text-align: left;
+}
+.pm-k { font-size: 8.5px; letter-spacing: var(--track-label); color: var(--text-faint); }
+.pm-name { font-size: 15px; letter-spacing: 0.14em; font-weight: 500; color: var(--text-starlight); }
+.pm-level { font-size: 9px; letter-spacing: var(--track-label); color: var(--text-muted); }
+.pm-level[data-level='MATCH HIGH'] { color: var(--visible-green); }
+
+.sky-info {
+  position: absolute; left: calc(var(--safe-left) + var(--space-4)); bottom: calc(var(--safe-bottom) + var(--nav-h) + 96px);
+  display: grid; gap: 1px; pointer-events: none;
+}
+.sky-info > div { display: grid; grid-template-columns: 54px auto; align-items: baseline; }
+.sky-info dt { font-size: 8.5px; letter-spacing: var(--track-label); color: var(--text-faint); }
+.sky-info dd { font-size: 11.5px; color: var(--text-starlight); }
+.sky-info > div:nth-child(-n + 2) dd { color: var(--signal-cyan); }
+.live-counts { position: absolute; left: calc(var(--safe-left) + var(--space-4)); right: 64px; bottom: calc(var(--safe-bottom) + var(--nav-h) + 78px); font-size: 9px; letter-spacing: 0.12em; color: var(--text-muted); pointer-events: none; }
+.live-tools { position: absolute; right: calc(var(--safe-right) + var(--space-2)); bottom: calc(var(--safe-bottom) + var(--nav-h) + 92px); display: grid; gap: 2px; }
+.live-strips { position: absolute; left: 0; right: 0; bottom: calc(var(--safe-bottom) + var(--nav-h)); padding: 0 calc(var(--safe-right) + 8px) 2px calc(var(--safe-left) + 8px); display: grid; gap: 0; background: linear-gradient(to top, rgba(5, 7, 11, 0.85), rgba(5, 7, 11, 0)); }
+:root[data-night='red'] .live-strips { background: linear-gradient(to top, rgba(2, 2, 2, 0.9), rgba(2, 2, 2, 0)); }
+.live-strips .strip { border-bottom: 0; }
+.layer-strip { border-top: 1px solid var(--line-subtle) !important; }
+
+.live-selection {
+  position: absolute; left: 50%; transform: translateX(-50%); width: min(440px, calc(100% - 24px));
+  bottom: calc(var(--safe-bottom) + var(--nav-h) + 84px);
+  padding: var(--space-2) var(--space-3); display: grid; gap: 4px;
+  background: rgba(9, 13, 20, 0.92); border: 1px solid var(--line); border-left: 2px solid var(--signal-cyan); border-radius: var(--radius-hair);
+}
+:root[data-night='red'] .live-selection { background: rgba(5, 2, 2, 0.95); }
+.live-selection:not([hidden]) ~ .sky-info, .live:has(.live-selection:not([hidden])) .sky-info, .live:has(.live-selection:not([hidden])) .live-counts { opacity: 0; }
+.sel-head { display: flex; justify-content: space-between; align-items: center; }
+.sel-name { font-size: 15px; font-weight: 500; letter-spacing: 0.03em; }
+.sel-tele { font-size: 11px; color: var(--text-muted); }
+.sel-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.sel-actions { display: flex; }
+
+/* ───── sheets: objects / passes / alerts ───── */
+.object-title { font-size: 20px; font-weight: 500; letter-spacing: 0.06em; margin-top: 2px; }
+.star-list { font-size: 10.5px; color: var(--text-muted); line-height: 1.7; margin-top: var(--space-3); }
+.sheet-actions { margin-top: var(--space-4); }
+.pass-plot-wrap { display: grid; place-items: center; margin: var(--space-2) 0; }
+.pass-plot { width: min(260px, 70vw); overflow: visible; }
+.pp-horizon { fill: none; stroke: var(--line-strong); }
+.pp-ring { fill: none; stroke: var(--line-subtle); }
+.pp-label { font-family: var(--font-mono); font-size: 10px; fill: var(--text-muted); text-anchor: middle; dominant-baseline: middle; }
+.pp-label.n { fill: var(--signal-amber); }
+.pp-path { fill: none; stroke: var(--signal-cyan); stroke-width: 1.2; opacity: 0.55; stroke-dasharray: 2 3; }
+.pp-vis { fill: none; stroke: var(--visible-green); stroke-width: 1.6; }
+.pp-max { fill: var(--signal-cyan); }
+.pp-arrow { fill: var(--signal-cyan); }
+.object, .pass, .alert { max-height: calc(100% - var(--safe-top) - 60px); }
+
+/* ───── pass timeline ───── */
+.pt { position: relative; margin: var(--space-3) 0; }
+.pt .tl-event { min-height: 60px; }
+.pt-dim .tl-name { color: var(--text-muted); }
+.pt-row { display: flex; align-items: center; gap: var(--space-3); }
+.pass-glyph { overflow: visible; }
+.pg-horizon { stroke: var(--line-strong); }
+.pg-arc { fill: none; stroke: var(--text-muted); stroke-width: 1; }
+.pg-vis { fill: none; stroke: var(--visible-green); stroke-width: 1.6; }
+
+/* ───── saved satellites (orbital timelines) ───── */
+.saved-row { display: grid; gap: 3px; width: 100%; text-align: left; padding: var(--space-3) 0; border-top: 1px solid var(--line-subtle); color: inherit; }
+.saved-name { font-size: 16px; font-weight: 500; letter-spacing: 0.03em; }
+.saved-next { font-size: 10.5px; letter-spacing: 0.1em; color: var(--signal-cyan); }
+.saved-alert { color: var(--signal-amber); }
+.orbit-strip { width: 100%; height: 26px; }
+.os-axis, .os-tick { stroke: var(--line-strong); }
+.os-pass { fill: var(--text-muted); }
+.os-pass.poss { fill: var(--signal-amber); }
+.os-pass.vis { fill: var(--visible-green); }
+.saved-axis { display: flex; justify-content: space-between; font-size: 8.5px; color: var(--text-faint); letter-spacing: 0.1em; }
+
+/* ───── history ───── */
+.hist-day { font-size: 10.5px; letter-spacing: var(--track-label); color: var(--text-muted); margin: var(--space-4) 0 var(--space-1); font-weight: 500; }
+.hist-row { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--line-subtle); }
+.hist-main, .loc-main { flex: 1; display: grid; gap: 2px; text-align: left; padding: var(--space-3) 0; color: inherit; min-height: var(--touch); }
+.loc-main[aria-pressed='true'] .hist-name::before { content: '● '; color: var(--signal-cyan); }
+.hist-name { font-size: 14.5px; font-weight: 500; }
+.hist-meta { font-size: 10px; color: var(--text-muted); letter-spacing: 0.06em; }
+.loc-form { margin-top: var(--space-3); }
+
+@media (min-width: 760px) {
+  .nav { left: 50%; right: auto; transform: translateX(-50%); width: 460px; border: 1px solid var(--line); border-bottom: 0; }
+  .home2 { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); grid-template-rows: auto 1fr auto; column-gap: var(--space-7); padding-left: 5vw; padding-right: 5vw; }
+  .home2 .v2-head { grid-column: 1 / -1; }
+  .home2-sky { grid-row: 2 / span 2; }
+  .home2-next { align-self: end; }
+  .home2-actions { align-self: start; }
+  .v2-page { padding-left: max(var(--space-4), calc(50% - 320px)); padding-right: max(var(--space-4), calc(50% - 320px)); }
+  .sheet.object, .sheet.pass, .sheet.alert { top: 0; max-height: none; }
+}
+@media (max-height: 700px) {
+  .live-compass { top: calc(var(--safe-top) + 100px); }
+  .sky-info > div:nth-child(n + 5) { display: none; }
+}
+.live-notice { top: calc(var(--safe-top) + 150px); grid-template-columns: 1fr; border-left-color: var(--signal-amber); z-index: 2; }
+/* sheets sit above the bottom navigation */
+.sheet { z-index: 30; }
+.pt-hour { width: 13px; left: 56px; background: var(--line-strong); }
+:root[data-night='red'] { --constellation-ice: #7f2a2a; }
